@@ -1788,7 +1788,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "poner tapa"
+                "1": "tapar olla"
             }
         },
         "4_G4kXEm6K": {
@@ -1824,7 +1824,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "poner tapa"
+                "1": "tapar olla"
             }
         },
         "4_EJI51GDp": {
@@ -29953,23 +29953,6 @@
                 "1": "destapar olla"
             }
         },
-        "3_XkftsHE1": {
-            "vid": "3",
-            "flg": 0,
-            "z": [
-                240.886
-            ],
-            "xy": [
-                2,
-                91.789,
-                407.579,
-                0.843,
-                0
-            ],
-            "av": {
-                "1": "quitar tapa"
-            }
-        },
         "3_DA7a4K8d": {
             "vid": "3",
             "flg": 0,
@@ -30099,7 +30082,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "poner tapa"
+                "1": "tapar olla"
             }
         },
         "5_H0O1zCHa": {
@@ -30459,7 +30442,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_mojqjEXA": {
@@ -30747,7 +30730,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_w7cC0ZCc": {
@@ -30807,7 +30790,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_YiWnTahB": {
@@ -30975,7 +30958,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_z0QXO1PO": {
@@ -31131,7 +31114,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_BrmaATV7": {
@@ -31155,7 +31138,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_TmxNemeL": {
@@ -31191,7 +31174,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_EhqvgyDV": {
@@ -31371,7 +31354,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_rWX3XIXx": {
@@ -31395,7 +31378,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_eIBVJOLG": {
@@ -31443,7 +31426,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "quitar tapa"
+                "1": "destapar olla"
             }
         },
         "9_Y32mbwB4": {
