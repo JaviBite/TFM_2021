@@ -6,6 +6,9 @@ filepath = sys.argv[1]
 f = open(filepath, encoding='utf-8')
 data = json.load(f)
 
+for i in ["1","2","3","4"]:
+    data['config']['file']['loc_prefix'][i] = "file:///%DIR_TO_VIDEOS%"
+
 outfile = 'out.json'
 numlines = 0
 
