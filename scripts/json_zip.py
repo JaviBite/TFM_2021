@@ -6,7 +6,7 @@ filepath = sys.argv[1]
 f = open(filepath, encoding='utf-8')
 data = json.load(f)
 
-outfile = 'out_' + filepath
+outfile = 'out.json'
 numlines = 0
 
 for line in open(filepath): 
