@@ -82,7 +82,8 @@ def main():
             fragments = []
             
             for elem in data:
-                fragments.append({'time':elem['z'], 'act':elem['av']['1']})
+                if len(elem['z']) == 2:
+                    fragments.append({'time':elem['z'], 'act':elem['av']['1']})
 
             print("Reproducing video: ", videoPath)
 
@@ -153,6 +154,8 @@ def main():
                         break
                     elif cv2.waitKey(25) & 0xFF == ord('p'):
                         paused = not paused
+                    elif cv2.waitKey(25) & 0xFF == ord('n'):
+                        break
                     
                     if not paused:
                         frame_i += 1
