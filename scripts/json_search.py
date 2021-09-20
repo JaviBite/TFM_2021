@@ -22,9 +22,8 @@ def main():
                     action="store_true")
 
     args = parser.parse_args()
-    print(args)
     
-    file1 = sys.argv[1]
+    file1 = args.json_dir
 
     # Opening JSON file
     f1 = open(file1, encoding='utf-8')
