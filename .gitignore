@@ -129,5 +129,6 @@ dmypy.json
 .pyre/
 
 
-**/temp.json
-**/out.json
+**temp**
+**out**
+**nogit**
