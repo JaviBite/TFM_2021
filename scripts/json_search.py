@@ -1,8 +1,8 @@
 
 import json
-import sys
+import sys, os
 import codecs, unicodedata
-import re
+import re, random
 import cv2
 import numpy as np
 
@@ -20,8 +20,15 @@ def main():
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
     parser.add_argument("-vis","--visualize", help="Display video fragments",
                     action="store_true")
+    parser.add_argument("-s","--save_folder", type=str, default=None, help="Save video fragments folder")
+    parser.add_argument('-r',"--random_order", action="store_true", help="Random order of video framgets to save")
+    parser.add_argument('-mf',"--max_fragments", type=int, default=None, help="Max number of fragments to save")
 
     args = parser.parse_args()
+    out_folder = args.save_folder
+
+    max_out_frags = args.max_fragments
+    random_order = args.random_order
     
     file1 = args.json_dir
 
@@ -168,6 +175,85 @@ def main():
             
             # Closes all the frames
             cv2.destroyAllWindows()
+
+    if out_folder is not None:
+        print("Saving video fragments...")
+
+        if not os.path.isdir(out_folder):
+            os.mkdir(out_folder)
+
+        repVideos = dict(sorted(video_data.items(), reverse=False))
+        out_name = word.replace(" ","_")
+        frag_count = 0
+
+        fragments = []
+        for vid, data in zip(repVideos, repVideos.values()):
+
+            videoPath = getVidPath(data1, localpath, str(vid)) 
+            for elem in data:
+                if len(elem['z']) == 2:
+                    fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vpath':videoPath})
+
+        if random_order:
+            random.shuffle(fragments)
+
+        for frag in fragments:
+
+            # Create a VideoCapture object and some useful data
+            videoPath = frag['vpath']
+            cap = cv2.VideoCapture(videoPath)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frame_count/fps
+
+            width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
+            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
+            
+            # Create video wirter
+            fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+            this_out_name = out_folder + '/' + out_name + '_' + str(frag_count) + '.avi'
+            out = cv2.VideoWriter(this_out_name, fourcc, fps, (int(width),int(height)))
+
+            init_frame = int(frag['time'][0] * fps)
+            final_frame = int(frag['time'][1] * fps)
+            #frame_no = init_frame/frame_count
+
+            text = frag['act']
+
+            #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
+            #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
+            #The second argument defines the frame number in range 0.0-1.0
+            cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
+
+            
+            # Check if camera opened successfully
+            if (cap.isOpened()== False): 
+                print("Error opening video  file")
+                continue
+            
+            # Read until video is completed
+            frame_i = init_frame
+
+            while(cap.isOpened()):
+                # Capture frame-by-frame
+                ret, frame = cap.read()
+                if frame_i <= final_frame and ret == True:                
+                    out.write(frame)
+                    frame_i =  frame_i + 1
+                
+                # Break the loop
+                else: 
+                    break
+            
+            out.release()
+            cap.release()
+            frag_count = frag_count + 1
+
+            if max_out_frags is not None and frag_count >= max_out_frags:
+                break
+
+        
+
 
     # Closing file
     f1.close()
