@@ -5,9 +5,16 @@ import codecs
 import re
 import random, string
 import glob, os
+import datetime
 
-FRAMES_PER_SECOND = 25
 REGEXP_VIDEO_NAME = "[0-9A-Z]{12}_[0-9]{4}_[0-9]{2}_[0-9]{2}"
+
+#python json_prescreen.py temp.json ../../actions/bsh_annotations/DCA6327319E6
+
+SYNC_SECS = -10
+INIT_PADDING = 0
+END_PADDING = 0
+FIXED_DURATION = 10
 
 import argparse
 
@@ -20,9 +27,6 @@ def parseargs():
     parser.add_argument('bsh_dir_json', help="Dir where the video bsh jsons are")
     parser.add_argument('out_json', nargs='?', default="out.json", help="Path file for the output json")
     parser.add_argument('-v','--verbose', help="Show prints on screen", action="store_true")
-    # parser.add_argument("-m","--mode", default='full', help="Info to excract", choices=['full', 'actions', 'noums'])
-    # parser.add_argument("-sm","--sort_mode", default='frec', help="Sorting mode, alphabetical or frequency", choices=['alph', 'frec'])
-    # parser.add_argument("-so","--sort_order", default='desc', help="Sorting order (by frequency or alph)", choices=['asc', 'desc'])
 
     return parser.parse_args()
 
@@ -72,6 +76,9 @@ def main():
             eprint("File \"", file_bsh, "\" is bad named, skipping...")
             break
 
+        timestamp_end = re.search("_[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{6}", file_bsh)[0]
+        timestamp_end = datetime.datetime.strptime(timestamp_end, "_%Y_%m_%d_%H%M%S")
+
         video_nameid = video_nameid[0]
 
         if verbose: print("Processing video: ", video_nameid)
@@ -82,23 +89,36 @@ def main():
 
             id_recipe = value['id_recipe']
             id_step = value['id_step']
-            init_time = int(value['timestart']) / 10000 #TODO
+            init_timestamp =  datetime.datetime.fromtimestamp(float(value['timestart'])/1000.)
+
+            end_timestamp = None
             if value['timeend'] is not None:
-                end_time = int(value['timeend']) / 10000  #TODO
-            else:
-                end_time = -1
+                end_timestamp = datetime.datetime.fromtimestamp(float(value['timeend'])/1000.)
 
             str_action = lookforaction(data_bsh, id_recipe,id_step)
 
-            actions.append({'time':[init_time,end_time], 'act':str_action})
+            actions.append({'time':[init_timestamp,end_timestamp], 'act':str_action})
 
         if verbose: print("\tLook for video on dataset...")
 
         vid = -1
+        timestamp_start = None
         for value in data_ours['file'].values():
             video_name = re.search(REGEXP_VIDEO_NAME, value['fname'])[0]
             if video_name == video_nameid:
+                #Get video id
                 vid = value['fid']
+
+                #Get init timestamp
+                timestamp_start = re.search("_[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{6}", value['fname'])[0]
+                timestamp_start = datetime.datetime.strptime(timestamp_start, "_%Y_%m_%d_%H%M%S")
+
+                if len(actions) > 0 and actions[0]['act'] == "Comienzo":
+                    timestamp_start = actions[0]['time'][0]
+                
+                #Sync
+                timestamp_start = timestamp_start + datetime.timedelta(0,SYNC_SECS)
+
                 if verbose: print("\tVideo found, ID: ", vid)
                 break
 
@@ -112,13 +132,18 @@ def main():
 
             time_start = action['time'][0]
             time_end = action['time'][1]
-            if time_end < 0:
-                time_end = time_start + 5
+
+            time_start = time_start - timestamp_start
+            seconds_start = time_start.total_seconds() - INIT_PADDING
+            seconds_end = seconds_start + FIXED_DURATION + END_PADDING
+            if time_end is not None:
+                time_end = time_end - timestamp_start
+                seconds_end = time_end.total_seconds() + END_PADDING
 
             # Generating the action value
             new_value = {'vid':str(vid), 
                         'flg':0, 
-                        'z':[time_start, time_end], 
+                        'z':[seconds_start, seconds_end], 
                         'xy':[], 
                         'av':{'1':action['act']}}
 
