@@ -1,11 +1,27 @@
+import numpy as np, argparse
+import time, math
+import os, json, cv2, random, torch, sys
+from glob import glob
 
 from detectron2 import model_zoo
+
+pythonpath_var = os.environ['PYTHONPATH']
+list_paths = pythonpath_var.split(';')
+pysot_path = None
+for path in list_paths:
+    if 'pysot' in path:
+        pysot_path = path
+        break
+
+if pysot_path is None:
+    print("Error no PySOT (called something with \'pysot\') folder found on sys variables", file=sys.stderr)
+sys.path.insert(1, pysot_path)
 
 CONFIG_COCO = model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
 MODEL_COCO = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
 
-CONFIG_TRACK = "pysot/experiments/siamrpn_r50_l234_dwxcorr/config.yaml"
-MODEL_TRACK = "pysot/experiments/siamrpn_r50_l234_dwxcorr/model.pth"
+CONFIG_TRACK = pysot_path + "/experiments/siamrpn_r50_l234_dwxcorr/config.yaml"
+MODEL_TRACK = pysot_path + "/experiments/siamrpn_r50_l234_dwxcorr/model.pth"
 
 REFRESH_RATE = 60
 PAD = 20
@@ -15,10 +31,7 @@ CAT_2_TO_1 = {0: 81, 1: 82, 2: 73, 3: 83, 4: 84}
 
 SCORE_THRESH_TEST = 0.8
 
-import numpy as np, argparse
-import time, math
-import os, json, cv2, random, torch, sys
-from glob import glob
+
 
 # pysot packages
 from pysot.core.config import cfg
@@ -27,7 +40,7 @@ from pysot.tracker.siamrpn_tracker import SiamRPNTracker
 from pysot.tracker.tracker_builder import build_tracker
 
 # Hungarian algorithm
-from munkres import Munkres, make_cost_matrix, print_matrix
+from libs.munkres import Munkres, make_cost_matrix, print_matrix
 
 # import some common detectron2 utilities
 from detectron2.engine import DefaultPredictor
@@ -37,7 +50,7 @@ from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.data.datasets import register_coco_instances
 from detectron2.data import MetadataCatalog, DatasetCatalog
 from detectron2.structures import Boxes, Instances, pairwise_ioa
-from multiTraker import SiamRPNMultiTracker
+from libs.multiTraker import SiamRPNMultiTracker
 import time
 import tqdm
 
