@@ -5,6 +5,7 @@ from glob import glob
 
 from detectron2 import model_zoo
 
+# Get pysot folder for models
 pythonpath_var = os.environ['PYTHONPATH']
 list_paths = pythonpath_var.split(';')
 pysot_path = None
@@ -17,21 +18,14 @@ if pysot_path is None:
     print("Error no PySOT (called something with \'pysot\') folder found on sys variables", file=sys.stderr)
 sys.path.insert(1, pysot_path)
 
+# Models and cofigurations
 CONFIG_COCO = model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
 MODEL_COCO = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
 
 CONFIG_TRACK = pysot_path + "/experiments/siamrpn_r50_l234_dwxcorr/config.yaml"
 MODEL_TRACK = pysot_path + "/experiments/siamrpn_r50_l234_dwxcorr/model.pth"
 
-REFRESH_RATE = 60
-PAD = 20
-INIT_FRAMES = 30
-
 CAT_2_TO_1 = {0: 81, 1: 82, 2: 73, 3: 83, 4: 84}
-
-SCORE_THRESH_TEST = 0.8
-
-
 
 # pysot packages
 from pysot.core.config import cfg
@@ -53,15 +47,6 @@ from detectron2.structures import Boxes, Instances, pairwise_ioa
 from libs.multiTraker import SiamRPNMultiTracker
 import time
 import tqdm
-
-COLORS = {}
-
-COLORS[73] = (0, 255, 0)        # huevo verde
-COLORS[81] = (255, 0, 0)        # patata azul
-COLORS[82] = (0, 0, 255)        # patata pelada roja
-COLORS[83] = (255, 255, 0)      # llema cian
-COLORS[84] = (0, 255, 255)      # cebolla amarilla
-COLORS[0]  = (255, 255, 255)    # manos blanco
 
 def detBox_to_Box(box, pad=0):
 
@@ -106,6 +91,7 @@ def costFunc(box1, box2):
 
 def main():
 
+    # Default values
     REFRESH_RATE = 3
     PAD = 20
     INIT_FRAMES = 30
