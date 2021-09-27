@@ -71,9 +71,9 @@ def draw_pot_elipse(frame, box):
     return ret
 
 def trackeable(class_id):
-    return class_id == 73 or class_id >= 81# or class_id == 0
+    #return class_id == 73 or class_id >= 81# or class_id == 0
     #return class_id == 0
-    #return class_id == 41 or class_id == 45
+    return class_id == 41 or class_id == 45
     
 def costFunc(box1, box2):
     iou = pairwise_ioa(box1, box2)
@@ -217,20 +217,22 @@ def main():
                 coco_outputs = coco_predictor(frame)
                 outputs = coco_outputs
 
-                bowls = outputs["instances"][outputs["instances"].pred_classes == 41]
-                cups = outputs["instances"][outputs["instances"].pred_classes == 45]
+                #bowls = outputs["instances"][outputs["instances"].pred_classes == 41]
+                #cups = outputs["instances"][outputs["instances"].pred_classes == 45]
 
-                if len(bowls) > 0:
-                    outputs["instances"] = bowls
-                    if len(cups) > 0:
-                        outputs["instances"] = Instances.cat([bowls["instances"],cups["instances"]])
-                elif len(cups) > 0:
-                    outputs["instances"] = cups
+                trackeables = []
+                for i in range(len(outputs["instances"].pred_classes)):
+                    if trackeable(outputs["instances"].pred_classes[i]):
+                        trackeables.append(True)
+                    else:
+                        trackeables.append(False)
+
+                outputs["instances"] = outputs["instances"][trackeables]
 
                 fields = outputs["instances"].get_fields()
                 classes = fields["pred_classes"]
                 
-                if len(bowls) > 0 or len(cups) > 0:
+                if len(outputs) > 0:
                     # Check dup trackers'
                     trackers.checkDups()
                     
