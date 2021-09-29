@@ -13,7 +13,7 @@ def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=str, help="Path to the video that will be processed")
-    parser.add_argument("output", type=str, nargs="?", default="out.avi", help="Path to save the processed video")
+    parser.add_argument("output", type=str, nargs="?", default="hub_out.avi", help="Path to save the processed video")
 
     args = parser.parse_args()
 
@@ -27,6 +27,9 @@ def main():
     height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
     frames_per_second = video.get(cv2.CAP_PROP_FPS)
     num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # Initialize video writer
+    video_writer = cv2.VideoWriter(output_file, fourcc=cv2.VideoWriter_fourcc(*"mp4v"), fps=float(frames_per_second), frameSize=(width, height), isColor=True)
 
     hasFrame = True
     distances = [width**2,width**2,width**2,width**2]
@@ -47,7 +50,6 @@ def main():
         #cv2.imshow("HUE", h)
         #cv2.imshow("Saturation", s)
         cv2.imshow("Value", gray_img)
-        cv2.waitKey(100)
 
         blurred = cv2.GaussianBlur(v,(5,5),0)
         edges = cv2.Canny(blurred ,50,150,apertureSize = 3)
@@ -63,55 +65,66 @@ def main():
         lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]),
                     min_line_length, max_line_gap)
 
-        for line in lines:
-            for x1,y1,x2,y2 in line:
-                angle = math.atan2(y2 - y1 ,x2 - x1)
-                if ((math.pi/2) - abs(angle)) < 0.5:
+        lines_edges = image
+        if lines is not None:
+            for line in lines:
+                for x1,y1,x2,y2 in line:
+                    angle = math.atan2(y2 - y1 ,x2 - x1)
+                    if ((math.pi/2) - abs(angle)) < 0.5:
 
-                    cv2.line(line_image,(x1,y1),(x2,y2),(255,0,0),3)
+                        cv2.line(line_image,(x1,y1),(x2,y2),(255,0,0),3)
 
-                    # Up left
-                    if (distances[0] > math.hypot(0 - x1, 0 - y1)):
-                        corners[0] = (x1,y1)
-                        distances[0] = math.hypot(0 - x1, 0 - y1)
-                    elif (distances[0] > math.hypot(0 - x2, 0 - y2)):
-                        corners[0] = (x2,y2)
-                        distances[0] = math.hypot(0 - x2, 0 - y2)
+                        # Up left
+                        if (distances[0] > math.hypot(0 - x1, 0 - y1)):
+                            corners[0] = (x1,y1)
+                            distances[0] = math.hypot(0 - x1, 0 - y1)
+                        elif (distances[0] > math.hypot(0 - x2, 0 - y2)):
+                            corners[0] = (x2,y2)
+                            distances[0] = math.hypot(0 - x2, 0 - y2)
 
-                    # Up right
-                    if (distances[1] > math.hypot(width - x1, 0 - y1)):
-                        corners[1] = (x1,y1)
-                        distances[1] = math.hypot(width - x1, 0 - y1)
-                    elif (distances[1] > math.hypot(width - x2, 0 - y2)):
-                        corners[1] = (x2,y2)
-                        distances[1] = math.hypot(width - x2, 0 - y2)
+                        # Up right
+                        if (distances[1] > math.hypot(width - x1, 0 - y1)):
+                            corners[1] = (x1,y1)
+                            distances[1] = math.hypot(width - x1, 0 - y1)
+                        elif (distances[1] > math.hypot(width - x2, 0 - y2)):
+                            corners[1] = (x2,y2)
+                            distances[1] = math.hypot(width - x2, 0 - y2)
 
-                    # Down left
-                    if (distances[3] > math.hypot(0 - x1, height - y1)):
-                        corners[3] = (x1,y1)
-                        distances[3] = math.hypot(0 - x1, height - y1)
-                    elif (distances[3] > math.hypot(0 - x2, height - y2)):
-                        corners[3] = (x2,y2)
-                        distances[3] = math.hypot(0 - x2, height - y2)
+                        # Down left
+                        if (distances[3] > math.hypot(0 - x1, height - y1)):
+                            corners[3] = (x1,y1)
+                            distances[3] = math.hypot(0 - x1, height - y1)
+                        elif (distances[3] > math.hypot(0 - x2, height - y2)):
+                            corners[3] = (x2,y2)
+                            distances[3] = math.hypot(0 - x2, height - y2)
 
-                    # Down right
-                    if (distances[2] > math.hypot(width - x1, height - y1)):
-                        corners[2] = (x1,y1)
-                        distances[2] = math.hypot(width - x1, height - y1)
-                    elif (distances[2] > math.hypot(width - x2, height - y2)):
-                        corners[2] = (x2,y2)
-                        distances[2] = math.hypot(width - x2, height - y2)
+                        # Down right
+                        if (distances[2] > math.hypot(width - x1, height - y1)):
+                            corners[2] = (x1,y1)
+                            distances[2] = math.hypot(width - x1, height - y1)
+                        elif (distances[2] > math.hypot(width - x2, height - y2)):
+                            corners[2] = (x2,y2)
+                            distances[2] = math.hypot(width - x2, height - y2)
+            
+
+            for i in range(4):
+                p1 = (int(corners[i][0]),int(corners[i][1]))
+                p2 = (int(corners[(i+1)%4][0]),int(corners[(i+1)%4][1]))
+                cv2.line(line_image,p1,p2,(0,0,255),3)
+            
+
+            lines_edges = cv2.addWeighted(image, 0.8, line_image, 1, 0)
+            cv2.imshow("Lines",lines_edges)
+
+        video_writer.write(lines_edges)
         
+        k = cv2.waitKey(20)
+        if k==27:    # Esc key to stop
+            break
 
-        for i in range(4):
-            p1 = (int(corners[i][0]),int(corners[i][1]))
-            p2 = (int(corners[(i+1)%4][0]),int(corners[(i+1)%4][1]))
-            cv2.line(line_image,p1,p2,(0,0,255),3)
-        
-
-        lines_edges = cv2.addWeighted(image, 0.8, line_image, 1, 0)
-        cv2.imshow("Lines",lines_edges)
-
+    # Release resources
+    video.release()
+    video_writer.release()
 
 
 if __name__ == '__main__':
