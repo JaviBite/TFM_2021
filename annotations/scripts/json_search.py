@@ -263,7 +263,7 @@ def main():
                     to_write = frame   
 
                     if args.region_interest:
-                        to_write = getROI(frame, args.padding)
+                        to_write = getROI(frame, args.padding,width,height)
                         to_write = cv2.resize(to_write,(args.dimension,args.dimension))
 
                     out.write(to_write)
