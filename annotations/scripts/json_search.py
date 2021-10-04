@@ -8,6 +8,16 @@ import numpy as np
 
 import argparse
 
+# Return the region of interest image from a given frame (it corresponds to the pan or cup zone)
+def getROI(frame, padding):
+
+    ret = frame
+
+    x1,x2,y1,y2 = funcioncarlos(frame)
+    #TODO cut the frame and apply the padding
+    ret = ret
+
+    return ret
 
 def getVidPath(jsondata, localpath, vid):
     namepath = jsondata['file'][vid]['fname']
@@ -23,6 +33,9 @@ def main():
     parser.add_argument("-s","--save_folder", type=str, default=None, help="Save video fragments folder")
     parser.add_argument('-r',"--random_order", action="store_true", help="Random order of video framgets to save")
     parser.add_argument('-mf',"--max_fragments", type=int, default=None, help="Max number of fragments to save")
+    parser.add_argument('-roi',"--region_interest", action="store_true", help="Save just the region of interest zone (must be square)")
+    parser.add_argument('-p',"--padding", type=int, default=0, help="Padding for the dettection zone")
+    parser.add_argument('-dim',"--dimension", type=int, default=250, help="Dimenson in pixels of the output square video")
 
     args = parser.parse_args()
     out_folder = args.save_folder
@@ -212,7 +225,10 @@ def main():
             # Create video wirter
             fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
             this_out_name = out_folder + '/' + out_name + '_' + str(frag_count) + '.avi'
+            
             out = cv2.VideoWriter(this_out_name, fourcc, fps, (int(width),int(height)))
+            if args.region_interest:
+                out = cv2.VideoWriter(this_out_name, fourcc, fps, (int(args.dimension),int(args.dimension)))
 
             init_frame = int(frag['time'][0] * fps)
             final_frame = int(frag['time'][1] * fps)
@@ -237,8 +253,14 @@ def main():
             while(cap.isOpened()):
                 # Capture frame-by-frame
                 ret, frame = cap.read()
-                if frame_i <= final_frame and ret == True:                
-                    out.write(frame)
+                if frame_i <= final_frame and ret == True:  
+                    to_write = frame   
+
+                    if args.region_interest:
+                        to_write = getROI(frame, args.padding)
+                        to_write = cv2.resize(to_write,(args.dimension,args.dimension))
+
+                    out.write(to_write)
                     frame_i =  frame_i + 1
                 
                 # Break the loop
