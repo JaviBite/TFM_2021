@@ -70,10 +70,21 @@ def draw_pot_elipse(frame, box):
 
     return ret
 
-def trackeable(class_id):
+def trackeable(class_id, box=None):
     #return class_id == 73 or class_id >= 81# or class_id == 0
     #return class_id == 0
-    return class_id == 41 or class_id == 45
+    classok = class_id == 41 or class_id == 45
+
+    boxok = True
+    areaok = True
+
+    if box is not None:
+        boxnp = detBox_to_Box(box)
+
+        areaok = box.area() > (200 * 200)
+        boxnp = (boxnp[2] - boxnp[3]) < 100     
+
+    return classok and boxok and areaok
     
 def costFunc(box1, box2):
     iou = pairwise_ioa(box1, box2)
@@ -96,7 +107,7 @@ def main():
     PAD = 20
     INIT_FRAMES = 30
 
-    SCORE_THRESH_TEST = 0.75
+    SCORE_THRESH_TEST = 0.3
     
     # Parse arguments
     parser = argparse.ArgumentParser()
@@ -222,7 +233,8 @@ def main():
 
                 trackeables = []
                 for i in range(len(outputs["instances"].pred_classes)):
-                    if trackeable(outputs["instances"].pred_classes[i]):
+                    box = outputs["instances"].pred_boxes[i]
+                    if trackeable(outputs["instances"].pred_classes[i], box):
                         trackeables.append(True)
                     else:
                         trackeables.append(False)
