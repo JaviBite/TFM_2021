@@ -191,7 +191,7 @@ flow = ctte*flowFB
 
 
 i=0
-roi_flow = None
+roi_window = None
 while(cap.isOpened()):
     
     if i > 100:
@@ -249,7 +249,7 @@ while(cap.isOpened()):
         #roi_flow = None#flow[80:400, 290:610, :]
         boxes = detect_pots(image_np, coco_predictor, 25) # padding 25
 
-        if roi_flow is None and len(boxes) > 0:
+        if roi_window is None and len(boxes) > 0:
             roi = boxes[0]
             # print(roi)
 
@@ -260,16 +260,16 @@ while(cap.isOpened()):
             if y2 >= height : y2 = int(height-1)
 
 
-            roi_flow = flow[y1:y1+y2,x1:x1+x2]
+            roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)] #[y1:y1+y2,x1:x1+x2]
             elipse = draw_pot_elipse(image_np,boxes)
             cv2.imshow('elipse', elipse) 
-            cv2.imshow('roi', gray1[y1:y1+y2,x1:x1+x2]) 
+            cv2.imshow('roi', gray1[tuple(roi_window)]) 
             cv2.waitKey()
         
         ######################################################################        
         ######################################################################        
 
-
+        roi_flow = flow[tuple(roi_window)]
         modulo, argumento, argumento2 = mi_gradiente(roi_flow)
         #cv2.imshow('flow HSV', flow_HSV)        
         cv2.imshow('flow HSV1', flow_HSV2)       
