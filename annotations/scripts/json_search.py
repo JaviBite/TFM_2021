@@ -13,13 +13,14 @@ def getROI(frame, padding, width, height):
 
     ret = frame
 
-    # x1,x2,y1,y2 = funcioncarlos(frame)
-    x1,x2,y1,y2 = 10,100,10,100
+    x1,x2,y1,y2 = funcioncarlos(frame)
+    
+    if x1-padding<0 : padding=x1
+    if x2+padding>=width : padding=int(width-1)-x2
+    if y1-padding<0 : padding=y1
+    if y2+padding>=height : padding=int(height-1)-y2
+
     x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
-    if x1<0 : x1=0
-    if x2>=width : x2=int(width-1)
-    if y1<0 : y1=0
-    if y2>=height : x2=int(height-1)
 
     ret = ret[y1:y2,x1:x2]
 
@@ -223,7 +224,7 @@ def main():
             cap = cv2.VideoCapture(videoPath)
             fps = cap.get(cv2.CAP_PROP_FPS)
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            duration = frame_count/fps
+            #duration = frame_count/fps
 
             width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
             height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
