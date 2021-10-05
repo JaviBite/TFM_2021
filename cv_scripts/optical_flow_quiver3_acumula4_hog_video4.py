@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 import os
 import scipy.io
 
+from pot_det import detect_pots
+
 from cv2 import __version__
 print(__version__)
 
@@ -96,7 +98,23 @@ def mi_gradiente(flow):
 inicializo variable
 '''
 
+# Detectron2 pot detection
 
+from detectron2 import model_zoo
+from detectron2.engine import DefaultPredictor
+from detectron2.config import get_cfg
+import torch
+
+CONFIG_COCO = model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+MODEL_COCO = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+
+# Initialize coco predictor
+cfg_coco = get_cfg()
+cfg_coco.merge_from_file(CONFIG_COCO)
+cfg_coco.MODEL.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+cfg_coco.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.3  # set threshold for this model
+cfg_coco.MODEL.WEIGHTS = MODEL_COCO
+coco_predictor = DefaultPredictor(cfg_coco) 
 
 
 thresh = 10 # initial threshold
@@ -228,6 +246,12 @@ while(cap.isOpened()):
         
         # aqui es donde tenemos que detectar la elipse        
         roi_flow = flow[80:400, 290:610, :]
+        boxes = detect_pots(image_np, coco_predictor)
+
+        if len(boxes) > 0:
+            roi = boxes[0]
+            roi_flow = flow[roi[0]:roi[2], roi[1]:roi[3]]
+            cv2.imshow('ROI', gray1[roi[0]:roi[2], roi[1]:roi[3]]) 
         
         ######################################################################        
         ######################################################################        
@@ -235,7 +259,7 @@ while(cap.isOpened()):
 
         modulo, argumento, argumento2 = mi_gradiente(roi_flow)
         #cv2.imshow('flow HSV', flow_HSV)        
-        cv2.imshow('flow HSV1', flow_HSV2)        
+        cv2.imshow('flow HSV1', flow_HSV2)       
      
    
         normalized_blocks, hog_image = mi_hog.hog(modulo, argumento2)

@@ -37,8 +37,7 @@ INIT_FRAMES = 30
 SCORE_THRESH_TEST = 0.75
 
 def detBox_to_Box(box, pad=0):
-
-    box_numpy = np.squeeze(box.cpu().numpy())
+    box_numpy = np.squeeze(box.tensor.to(torch.device("cpu")).numpy())
     box_numpy = [int(box_numpy[0]-pad), int(box_numpy[1]-pad), 
                  int(box_numpy[2]-box_numpy[0]+pad), int(box_numpy[3]-box_numpy[1]+pad)]
     
@@ -47,20 +46,44 @@ def detBox_to_Box(box, pad=0):
 def draw_pot_elipse(frame, boxes):
     ret = frame
 
-    centres = boxes.get_centers().cpu().numpy()
     for idx, box in enumerate(boxes):
-        box_np = detBox_to_Box(box)
 
-        centre = (int(centres[idx][0]),int(centres[idx][1]))
-
-        x_lenght = box_np[2]/2
-        y_lenght = box_np[3]/2
+        x_lenght = boxes[idx][2]/2
+        y_lenght = boxes[idx][3]/2
+        
+        centre = (int(boxes[idx][0]+x_lenght),int(boxes[idx][1]+y_lenght))
         axesLength = (int(x_lenght), int(y_lenght))
 
         ret = cv2.ellipse(ret, centre, axesLength, 0, 0, 360, (0,0,255), 3)
         #ret = cv2.rectangle(ret, (box_np[0], box_np[1]), (box_np[0]+box_np[2], box_np[1]+box_np[3]), (0,255,0), 3)
 
     return ret
+
+def trackeable(class_id, box=None):
+    classok = class_id == 41 or class_id == 45
+
+    boxok = True
+    areaok = True
+
+    if box is not None:
+        boxnp = detBox_to_Box(box)
+
+        areaok = box.area() > (200 * 200)
+        boxnp = (boxnp[2] - boxnp[3]) < 100     
+
+    return classok and boxok and areaok
+
+def detect_pots(frame, coco_predictor):
+
+    list_of_pots = []
+    outputs = coco_predictor(frame)
+
+    for i in range(len(outputs["instances"].pred_classes)):
+        box = outputs["instances"].pred_boxes[i][0]
+        if trackeable(outputs["instances"].pred_classes[i], box):
+            list_of_pots.append(detBox_to_Box(box))
+
+    return list_of_pots
 
 def main():
 
@@ -169,27 +192,12 @@ def main():
             
                 # Get prediction results for this frame
                 tstart = time.time()
-                coco_outputs = coco_predictor(frame)
-                outputs = coco_outputs
+                boxes = detect_pots(frame, coco_predictor)
                 tend = time.time()
                 detTime = detTime + (tend - tstart)
-                
-                bowls = outputs["instances"][outputs["instances"].pred_classes == 41]
-                cups = outputs["instances"][outputs["instances"].pred_classes == 45]
 
-                # Just bowls and cups
-                if len(bowls) > 0:
-                    outputs["instances"] = bowls
-                    if len(cups) > 0:
-                        outputs["instances"] = Instances.cat([bowls["instances"],cups["instances"]])
-                elif len(cups) > 0:
-                    outputs["instances"] = cups
+
                 
-                if len(bowls) > 0 or len(cups) > 0:
-                    fields = outputs["instances"].get_fields()
-                    classes = fields["pred_classes"]
-                    scores = fields["scores"]
-                    boxes = fields['pred_boxes']
             
             # Make sure the frame is colored
             vis = cv2.cvtColor(vis, cv2.COLOR_RGB2BGR)
