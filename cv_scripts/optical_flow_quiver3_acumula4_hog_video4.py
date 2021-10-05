@@ -7,7 +7,7 @@ Created on Mon Feb 24 11:54:23 2020
 """
 
 
-import mi_hog
+from libs import mi_hog
 
 
 
