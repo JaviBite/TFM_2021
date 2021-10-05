@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import os
 import scipy.io
 
-from pot_det import detect_pots
+from pot_det import detect_pots, draw_pot_elipse
 
 from cv2 import __version__
 print(__version__)
@@ -191,6 +191,7 @@ flow = ctte*flowFB
 
 
 i=0
+roi_flow = None
 while(cap.isOpened()):
     
     if i > 100:
@@ -245,13 +246,25 @@ while(cap.isOpened()):
         ######################################################################        
         
         # aqui es donde tenemos que detectar la elipse        
-        roi_flow = flow[80:400, 290:610, :]
-        boxes = detect_pots(image_np, coco_predictor)
+        #roi_flow = None#flow[80:400, 290:610, :]
+        boxes = detect_pots(image_np, coco_predictor, 25) # padding 25
 
-        if len(boxes) > 0:
+        if roi_flow is None and len(boxes) > 0:
             roi = boxes[0]
-            roi_flow = flow[roi[0]:roi[2], roi[1]:roi[3]]
-            cv2.imshow('ROI', gray1[roi[0]:roi[2], roi[1]:roi[3]]) 
+            # print(roi)
+
+            x1, y1, x2, y2 = roi
+            if x1< 0 : x1 = 0
+            if x2 >= width : x2 = int(width-1)
+            if y1 < 0 : y1 = 0 
+            if y2 >= height : y2 = int(height-1)
+
+
+            roi_flow = flow[y1:y1+y2,x1:x1+x2]
+            elipse = draw_pot_elipse(image_np,boxes)
+            cv2.imshow('elipse', elipse) 
+            cv2.imshow('roi', gray1[y1:y1+y2,x1:x1+x2]) 
+            cv2.waitKey()
         
         ######################################################################        
         ######################################################################        

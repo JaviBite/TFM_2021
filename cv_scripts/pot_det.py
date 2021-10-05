@@ -73,7 +73,7 @@ def trackeable(class_id, box=None):
 
     return classok and boxok and areaok
 
-def detect_pots(frame, coco_predictor):
+def detect_pots(frame, coco_predictor, pad=0):
 
     list_of_pots = []
     outputs = coco_predictor(frame)
@@ -81,7 +81,7 @@ def detect_pots(frame, coco_predictor):
     for i in range(len(outputs["instances"].pred_classes)):
         box = outputs["instances"].pred_boxes[i][0]
         if trackeable(outputs["instances"].pred_classes[i], box):
-            list_of_pots.append(detBox_to_Box(box))
+            list_of_pots.append(detBox_to_Box(box,pad))
 
     return list_of_pots
 
