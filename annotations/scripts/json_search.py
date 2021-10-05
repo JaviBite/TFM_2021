@@ -9,13 +9,19 @@ import numpy as np
 import argparse
 
 # Return the region of interest image from a given frame (it corresponds to the pan or cup zone)
-def getROI(frame, padding):
+def getROI(frame, padding, width, height):
 
     ret = frame
 
-    x1,x2,y1,y2 = funcioncarlos(frame)
-    #TODO cut the frame and apply the padding
-    ret = ret
+    # x1,x2,y1,y2 = funcioncarlos(frame)
+    x1,x2,y1,y2 = 10,100,10,100
+    x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
+    if x1<0 : x1=0
+    if x2>=width : x2=int(width-1)
+    if y1<0 : y1=0
+    if y2>=height : x2=int(height-1)
+
+    ret = ret[y1:y2,x1:x2]
 
     return ret
 
@@ -257,7 +263,7 @@ def main():
                     to_write = frame   
 
                     if args.region_interest:
-                        to_write = getROI(frame, args.padding)
+                        to_write = getROI(frame, args.padding,width,height)
                         to_write = cv2.resize(to_write,(args.dimension,args.dimension))
 
                     out.write(to_write)
