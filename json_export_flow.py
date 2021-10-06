@@ -31,14 +31,21 @@ def getVidPath(jsondata, localpath, vid):
 
 def main():
 
+    #Default arguments
+    FLOW_STEP = 2
+    FLOW_ACC = 4
+
+    ROI_DIM = 250
+    DET_PAD = 0
+
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
     parser.add_argument("out_file", type=str, default="out.csv", help="Save training data")
     parser.add_argument('-r',"--random_order", action="store_true", help="Random order of video framgets to save")
     parser.add_argument('-mf',"--max_fragments", type=int, default=None, help="Max number of fragments to save")
-    parser.add_argument('-p',"--padding", type=int, default=0, help="Padding for the dettection zone")
-    parser.add_argument('-dim',"--dimension", type=int, default=250, help="Dimenson in pixels of the output square video")
+    parser.add_argument('-p',"--padding", type=int, default=DET_PAD, help="Padding for the dettection zone")
+    parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
 
     args = parser.parse_args()
     out_file = args.out_dir
@@ -61,8 +68,10 @@ def main():
         localpath = args.videos_folder
 
     word = 0
-    print("Palabra a buscar: ")
-    word = input()
+    print("Palabras a buscar (separadas por coma): ")
+    words = input()
+
+    words = words.split(',')
 
     video_ids = {}
     video_data = {}
@@ -73,27 +82,24 @@ def main():
         vid = int(value['vid'])
 
         #if word in action and vid not in video_ids:
-        if re.search(word,action) is not None:
-            if vid not in video_ids:
-                video_ids[vid] = []
-            
-            if action not in video_ids[vid]:
-                video_ids[vid].append(action)
+        for word in words:
+            if re.search(word,action) is not None:
+                if vid not in video_ids:
+                    video_ids[vid] = []
+                
+                if action not in video_ids[vid]:
+                    video_ids[vid].append(action)
 
-            if vid not in video_data:
-                video_data[vid] = []
+                if vid not in video_data:
+                    video_data[vid] = []
 
-            video_data[vid].append(value)
+                video_data[vid].append(value)
+                break
 
 
     videos = dict(sorted(video_ids.items(), reverse=False))
     for vid, value in zip(videos, videos.values()):
         print(vid, value)
-
-    print("Saving video fragments...")
-
-    if not os.path.isdir(out_folder):
-        os.mkdir(out_folder)
 
     repVideos = dict(sorted(video_data.items(), reverse=False))
     out_name = word.replace(" ","_")
@@ -109,6 +115,8 @@ def main():
 
     if random_order:
         random.shuffle(fragments)
+
+    fout = open(out_file, "w")
 
     for frag in fragments:
 
@@ -126,7 +134,9 @@ def main():
         final_frame = int(frag['time'][1] * fps)
         #frame_no = init_frame/frame_count
 
-        text = frag['act']
+        action_noum = frag['act']
+
+        action = action_noum.split(" ")[0]
 
         #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
         #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
@@ -141,25 +151,39 @@ def main():
         # Read until video is completed
         frame_i = init_frame
 
+        sequencia = [[]]
         while(cap.isOpened()):
             # Capture frame-by-frame
             ret, frame = cap.read()
             if frame_i <= final_frame and ret == True:  
-                to_write = frame   
+                
+                #TODO Detectar la ROI una vez para todo el fragmento
 
-                #TODO aqui todo lo del flow optico y exportar los histogramas en formato csv
-                if args.region_interest:
-                    to_write = getROI(frame, args.padding,width,height)
-                    to_write = cv2.resize(to_write,(args.dimension,args.dimension))
+                # Visualization
+                if False:
+                    img_roi = getROI(frame, args.padding, width, height)
+                    img_roi = cv2.resize(to_write,(args.dimension,args.dimension))
+                    cv2.imshow("ROI", img_roi)
+                    cv2.waitKey()
 
-                out.write(to_write)
+                #TODO Calcular flujo optico
+
+                #TODO Acomular y hacer histograma
+
+                #TODO Guardar histograma en sequencia
+
                 frame_i =  frame_i + 1
             
             # Break the loop
             else: 
                 break
+
+        # End framgnet processing
+
+        #TODO Escribir secuencia y la classe (action)
+        sequencia = "TODO"
+        fout.write(sequencia + action + "\n")
         
-        out.release()
         cap.release()
         frag_count = frag_count + 1
 
@@ -170,6 +194,7 @@ def main():
 
 
     # Closing file
+    fout.close()
     f1.close()
 
 if __name__ == "__main__":
