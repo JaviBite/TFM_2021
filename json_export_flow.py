@@ -8,20 +8,27 @@ import numpy as np
 
 import argparse
 
-# Return the region of interest image from a given frame (it corresponds to the pan or cup zone)
+# Return the region of interest top-left and bottom-right corners
+# Call only with the first frame of each fragment, then use cropROI with the returned values.
 def getROI(frame, padding, width, height):
-
-    ret = frame
 
     # x1,x2,y1,y2 = funcioncarlos(frame)
     x1,x2,y1,y2 = 10,100,10,100
-    x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
-    if x1<0 : x1=0
-    if x2>=width : x2=int(width-1)
-    if y1<0 : y1=0
-    if y2>=height : x2=int(height-1)
 
-    ret = ret[y1:y2,x1:x2]
+    if x1-padding<0 : padding=x1
+    if x2+padding>=width : padding=int(width-1)-x2
+    if y1-padding<0 : padding=y1
+    if y2+padding>=height : padding=int(height-1)-y2
+
+    x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
+
+    return x1,x2,y1,y2
+
+# Crop the region of interest image from a given frame (it corresponds to the pan or cup zone)
+# Call once the ROI top-left and bottom-right corners have been returned by getROI in the first frame.
+def cropROI(frame,x1,x2,y1,y2):
+
+    ret = frame[y1:y2,x1:x2]
 
     return ret
 
@@ -151,17 +158,24 @@ def main():
         # Read until video is completed
         frame_i = init_frame
 
+        # Corners for ROI
+        roix1, roix2, roiy1, roiy2 = 0,0,0,0
+
         sequencia = [[]]
         while(cap.isOpened()):
             # Capture frame-by-frame
             ret, frame = cap.read()
             if frame_i <= final_frame and ret == True:  
                 
-                #TODO Detectar la ROI una vez para todo el fragmento
+                #DONE Detectar la ROI una vez para todo el fragmento
+                if frame_i == init_frame:
+                    roix1,roix2,roiy1,roiy2 = getROI(frame,args.padding,width,height)
+
+                img_roi = cropROI(frame,roix1,roix2,roiy1,roiy2)
 
                 # Visualization
                 if False:
-                    img_roi = getROI(frame, args.padding, width, height)
+                    img_roi = cropROI(frame,roix1,roix2,roiy1,roiy2)
                     img_roi = cv2.resize(to_write,(args.dimension,args.dimension))
                     cv2.imshow("ROI", img_roi)
                     cv2.waitKey()

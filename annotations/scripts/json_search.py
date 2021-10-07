@@ -22,9 +22,9 @@ def getROI(frame, padding, width, height):
 
     x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
 
-    ret = ret[y1:y2,x1:x2]
+    return x1,x2,y1,y2
 
-    return ret
+    
 
 def getVidPath(jsondata, localpath, vid):
     namepath = jsondata['file'][vid]['fname']
