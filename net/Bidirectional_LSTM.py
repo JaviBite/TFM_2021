@@ -59,6 +59,14 @@ print(model.summary())
 
 # train LSTM
 X, y = get_sequences(50000, n_timesteps)
+
+print(X.shape)
+print(y.shape)
+
+with open('X.txt','wb') as f:
+    for xi, yi in zip(X,y):
+        np.savetxt(f, [np.squeeze(xi), np.squeeze(yi)], fmt='%.18e')
+
 model.fit(X, y, epochs=1, batch_size=10)
 
 # evaluate LSTM
