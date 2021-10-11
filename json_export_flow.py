@@ -5,30 +5,42 @@ import codecs, unicodedata
 import re, random
 import cv2
 import numpy as np
+from cv_scripts.pot_det import detect_pots
+import torch
 
 import argparse
 
 # Return the region of interest top-left and bottom-right corners
 # Call only with the first frame of each fragment, then use cropROI with the returned values.
-def getROI(frame, padding, width, height):
+def getROI(frame, coco_pred, padding, width, height):
 
     # x1,x2,y1,y2 = funcioncarlos(frame)
-    x1,x2,y1,y2 = 10,100,10,100
+    pots = detect_pots(frame, coco_pred, padding)
+    print(pots)
 
-    if x1-padding<0 : padding=x1
-    if x2+padding>=width : padding=int(width-1)-x2
-    if y1-padding<0 : padding=y1
-    if y2+padding>=height : padding=int(height-1)-y2
+    if len(pots) > 0:
 
-    x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
+        x1,x2,y1,y2 = pots[0]
 
-    return x1,x2,y1,y2
+        if x1<0 : x1 = 0
+        if x2>=width : x2 = width - 1
+        if y1<0 : y1 = 0
+        if y2>=height : y2 = height - 1
+
+        # Padding alredy done on detect_pots()
+        #x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
+
+        return x1,x2,y1,y2
+
+    else:
+
+        return None
 
 # Crop the region of interest image from a given frame (it corresponds to the pan or cup zone)
 # Call once the ROI top-left and bottom-right corners have been returned by getROI in the first frame.
 def cropROI(frame,x1,x2,y1,y2):
 
-    ret = frame[y1:y2,x1:x2]
+    ret = frame[slice(y1,y1+y2), slice(x1,x1+x2)]
 
     return ret
 
@@ -55,7 +67,7 @@ def main():
     parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
 
     args = parser.parse_args()
-    out_file = args.out_dir
+    out_file = args.out_file
 
     max_out_frags = args.max_fragments
     random_order = args.random_order
@@ -78,7 +90,8 @@ def main():
     print("Palabras a buscar (separadas por coma): ")
     words = input()
 
-    words = words.split(',')
+    words = [x.strip() for x in words.split(',')]
+    print("Classes: ", words)
 
     video_ids = {}
     video_data = {}
@@ -104,9 +117,9 @@ def main():
                 break
 
 
-    videos = dict(sorted(video_ids.items(), reverse=False))
+    ''''videos = dict(sorted(video_ids.items(), reverse=False))
     for vid, value in zip(videos, videos.values()):
-        print(vid, value)
+        print(vid, value)'''
 
     repVideos = dict(sorted(video_data.items(), reverse=False))
     out_name = word.replace(" ","_")
@@ -124,6 +137,22 @@ def main():
         random.shuffle(fragments)
 
     fout = open(out_file, "w")
+
+    # Initialize coco predictor
+    from detectron2 import model_zoo
+    from detectron2.config import get_cfg
+    from detectron2.engine import DefaultPredictor
+
+    CONFIG_COCO = model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+    MODEL_COCO = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
+    SCORE_THRESH_TEST = 0.3
+
+    cfg_coco = get_cfg()
+    cfg_coco.merge_from_file(CONFIG_COCO)
+    cfg_coco.MODEL.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    cfg_coco.MODEL.ROI_HEADS.SCORE_THRESH_TEST = SCORE_THRESH_TEST  # set threshold for this model
+    cfg_coco.MODEL.WEIGHTS = MODEL_COCO
+    coco_predictor = DefaultPredictor(cfg_coco)
 
     for frag in fragments:
 
@@ -162,29 +191,42 @@ def main():
         roix1, roix2, roiy1, roiy2 = 0,0,0,0
 
         sequencia = [[]]
-        while(cap.isOpened()):
+
+        got_roi = False
+        not_roi_count = 0
+        while(cap.isOpened() and not_roi_count < 5):
             # Capture frame-by-frame
             ret, frame = cap.read()
-            if frame_i <= final_frame and ret == True:  
+            if frame_i <= final_frame and ret == True: 
                 
                 #DONE Detectar la ROI una vez para todo el fragmento
-                if frame_i == init_frame:
-                    roix1,roix2,roiy1,roiy2 = getROI(frame,args.padding,width,height)
+                if not got_roi:
+                    roi = getROI(frame, coco_predictor, args.padding, width, height)
 
-                img_roi = cropROI(frame,roix1,roix2,roiy1,roiy2)
+                if roi is not None:
+                    
+                    got_roi = True
+                    roix1,roix2,roiy1,roiy2 = roi
 
-                # Visualization
-                if False:
                     img_roi = cropROI(frame,roix1,roix2,roiy1,roiy2)
-                    img_roi = cv2.resize(to_write,(args.dimension,args.dimension))
-                    cv2.imshow("ROI", img_roi)
-                    cv2.waitKey()
+                    #img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
 
-                #TODO Calcular flujo optico
+                    # Visualization
+                    visualiced = False
+                    if True and not visualiced:
+                        cv2.imshow("ROI", img_roi)
+                        cv2.waitKey(10)
+                        visualiced = True
 
-                #TODO Acomular y hacer histograma
+                    #TODO Calcular flujo optico
 
-                #TODO Guardar histograma en sequencia
+                    #TODO Acomular y hacer histograma
+
+                    #TODO Guardar histograma en sequencia
+
+                else:
+
+                    not_roi_count = not_roi_count + 1
 
                 frame_i =  frame_i + 1
             

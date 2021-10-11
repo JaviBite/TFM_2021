@@ -27,7 +27,7 @@ def get_sequence(n_timesteps,size_elem):
     size = (n_timesteps,) + size_elem
     X = np.random.random(size)
     # random classes
-    y = np.random.choice([0, 1], size=n_timesteps, p=[.2, .8])
+    y = np.random.choice([0, 1], size=1, p=[.2, .8])
     return X, y
 
 # create multiple samples of random hogs
@@ -41,7 +41,7 @@ def get_sequences(n_sequences, n_timesteps, size_elem):
     # reshape input and output for lstm
     features = size_elem[0]*size_elem[1]*size_elem[2]
     seqX = array(seqX).reshape(n_sequences, n_timesteps, features)
-    seqY = array(seqY).reshape(n_sequences, n_timesteps, 1)
+    seqY = array(seqY).reshape(n_sequences, 1,)
     return seqX, seqY
 
 
@@ -53,8 +53,9 @@ features = size_elem[0]*size_elem[1]*size_elem[2]
 
 # define LSTM
 model = Sequential()
-model.add(Bidirectional(LSTM(50, return_sequences=True), input_shape=(n_timesteps, features)))
-model.add(TimeDistributed(Dense(1, activation= 'sigmoid')))
+model.add(Bidirectional(LSTM(50, return_sequences=False), input_shape=(n_timesteps, features)))
+#model.add(TimeDistributed(Dense(1, activation= 'sigmoid')))
+model.add(Dense(1, activation= 'sigmoid'))
 model.compile(loss= 'binary_crossentropy' , optimizer= 'adam' , metrics=[ 'acc' ])
 print(model.summary())
 
@@ -80,5 +81,7 @@ for _ in range(10):
     predict_x=model.predict(X) 
     yhat=np.round(predict_x,decimals=0)
 
-    exp, pred = y.reshape(n_timesteps), yhat.reshape(n_timesteps)
+    #exp, pred = y.reshape(n_timesteps), yhat.reshape(n_timesteps)
+
+    exp, pred = y, yhat
     print( 'y=%s, yhat=%s, correct=%s '% (exp, pred, array_equal(exp,pred)))

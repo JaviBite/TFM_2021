@@ -65,11 +65,11 @@ def trackeable(class_id, box=None):
     boxok = True
     areaok = True
 
-    if box is not None:
+    if classok and box is not None:
         boxnp = detBox_to_Box(box)
 
-        areaok = box.area() > (200 * 200)
-        boxnp = (boxnp[2] - boxnp[3]) < 100     
+        areaok = box.area() > (150 * 150)
+        boxok = (boxnp[2] - boxnp[3]) < 100     
 
     return classok and boxok and areaok
 
