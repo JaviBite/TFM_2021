@@ -5,44 +5,62 @@ import codecs, unicodedata
 import re, random
 import cv2
 import numpy as np
-from cv_scripts.pot_det import detect_pots
 import torch
+
+# Ours
+
+from cv_scripts.pot_det import detect_pots
+from cv_scripts.flow_hog import mi_gradiente
+from cv_scripts.libs import mi_hog
 
 import argparse
 
 # Return the region of interest top-left and bottom-right corners
 # Call only with the first frame of each fragment, then use cropROI with the returned values.
-def getROI(frame, coco_pred, padding, width, height):
+# Format: (X0, Y0, w, h)
+def getROI(frame, coco_pred, padding, width, height, flow):
 
     # x1,x2,y1,y2 = funcioncarlos(frame)
     pots = detect_pots(frame, coco_pred, padding)
-    print(pots)
 
     if len(pots) > 0:
 
-        x1,x2,y1,y2 = pots[0]
+        # Get the pot with the most flow near it
+        most_flow_index = 0
+        if len(pots) > 1:
 
-        if x1<0 : x1 = 0
-        if x2>=width : x2 = width - 1
-        if y1<0 : y1 = 0
-        if y2>=height : y2 = height - 1
+            averages = []
+            for pot in pots:
+                x1, y1, x2, y2 = pot
+
+                c = [x1+int(x2/2), y1+int(y2/2)]
+                areax = [slice(c[1]-5,c[1]+5), slice(c[0]-5,c[0]+5), 0]
+                areay = [slice(c[1]-5,c[1]+5), slice(c[0]-5,c[0]+5), 1]
+                
+                fx, fy = flow[tuple(areax)], flow[tuple(areay)] 
+                v = np.sqrt(fx * fx + fy * fy)
+
+                averages.append(np.average(v))
+
+            print(averages)
+            most_flow_index = np.argmax(averages)
+            print(most_flow_index)
+            
+        x1, y1, x2, y2 = pots[most_flow_index]
+
+        if x1 < 0 : x1 = 0
+        if x1+x2 >= width : x2 = width - x1
+        if y1 < 0 : y1 = 0
+        if y1+y2 >= height : y2 = height - y1
 
         # Padding alredy done on detect_pots()
         #x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
 
-        return x1,x2,y1,y2
+        return x1, y1, x2, y2
 
     else:
 
         return None
-
-# Crop the region of interest image from a given frame (it corresponds to the pan or cup zone)
-# Call once the ROI top-left and bottom-right corners have been returned by getROI in the first frame.
-def cropROI(frame,x1,x2,y1,y2):
-
-    ret = frame[slice(y1,y1+y2), slice(x1,x1+x2)]
-
-    return ret
 
 def getVidPath(jsondata, localpath, vid):
     namepath = jsondata['file'][vid]['fname']
@@ -57,10 +75,13 @@ def main():
     ROI_DIM = 250
     DET_PAD = 0
 
+    VIS = True
+
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
     parser.add_argument("out_file", type=str, default="out.csv", help="Save training data")
+    parser.add_argument('-i',"--std_inp", type=str, nargs='?', help="Get the imput from commands instad on the execution")
     parser.add_argument('-r',"--random_order", action="store_true", help="Random order of video framgets to save")
     parser.add_argument('-mf',"--max_fragments", type=int, default=None, help="Max number of fragments to save")
     parser.add_argument('-p',"--padding", type=int, default=DET_PAD, help="Padding for the dettection zone")
@@ -85,10 +106,11 @@ def main():
         localpath = data1['config']['file']['loc_prefix']['1']
     else:
         localpath = args.videos_folder
-
-    word = 0
-    print("Palabras a buscar (separadas por coma): ")
-    words = input()
+    
+    words = args.std_inp
+    if words is None:
+        print("Palabras a buscar (separadas por coma): ")
+        words = input()
 
     words = [x.strip() for x in words.split(',')]
     print("Classes: ", words)
@@ -116,10 +138,9 @@ def main():
                 video_data[vid].append(value)
                 break
 
-
-    ''''videos = dict(sorted(video_ids.items(), reverse=False))
-    for vid, value in zip(videos, videos.values()):
-        print(vid, value)'''
+    #videos = dict(sorted(video_ids.items(), reverse=False))
+    #for vid, value in zip(videos, videos.values()):
+    #    print(vid, value)
 
     repVideos = dict(sorted(video_data.items(), reverse=False))
     out_name = word.replace(" ","_")
@@ -145,7 +166,7 @@ def main():
 
     CONFIG_COCO = model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
     MODEL_COCO = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
-    SCORE_THRESH_TEST = 0.3
+    SCORE_THRESH_TEST = 0.2
 
     cfg_coco = get_cfg()
     cfg_coco.merge_from_file(CONFIG_COCO)
@@ -192,47 +213,85 @@ def main():
 
         sequencia = [[]]
 
-        got_roi = False
+        roi_window = None
         not_roi_count = 0
+
+        CTTE = 1 # Constat for CTTE * flow
+
+        flow_count = 0
+        last_gray_frames = [None, None]
+
+        # First frame for flow
+        ret, frame = cap.read()
+        last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         while(cap.isOpened() and not_roi_count < 5):
             # Capture frame-by-frame
             ret, frame = cap.read()
             if frame_i <= final_frame and ret == True: 
-                
+
+                # Update Last Frames
+                last_gray_frames[0] = last_gray_frames[1]
+                last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                #Calcular flujo optico
+                flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
+                                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
                 #DONE Detectar la ROI una vez para todo el fragmento
-                if not got_roi:
-                    roi = getROI(frame, coco_predictor, args.padding, width, height)
+                if roi_window is None:
+                    roi = getROI(frame, coco_predictor, args.padding, width, height, flowFB)
 
-                if roi is not None:
+                    if roi is not None:
+
+                        x1, y1, x2, y2 = roi
+                        roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
                     
-                    got_roi = True
-                    roix1,roix2,roiy1,roiy2 = roi
+                    else:
 
-                    img_roi = cropROI(frame,roix1,roix2,roiy1,roiy2)
-                    #img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
-
-                    # Visualization
-                    visualiced = False
-                    if True and not visualiced:
-                        cv2.imshow("ROI", img_roi)
-                        cv2.waitKey(10)
-                        visualiced = True
-
-                    #TODO Calcular flujo optico
-
-                    #TODO Acomular y hacer histograma
-
-                    #TODO Guardar histograma en sequencia
+                        not_roi_count = not_roi_count + 1
 
                 else:
 
-                    not_roi_count = not_roi_count + 1
+                    img_roi = frame[tuple(roi_window)]
+                    #img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
+
+                    # Visualization
+                    if VIS:
+                        cv2.imshow("ROI", img_roi)
+                        cv2.waitKey(100)
+                        visualiced = True
+
+                    #Acomular y hacer histograma
+                    if flow_count >= FLOW_ACC:
+                        flow_count = 0
+
+                        roi_flow = flow[tuple(roi_window)]
+                        modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+                        normalized_blocks, hog_image = mi_hog.hog(modulo, argumento2)
+
+                        # Visualization
+                        if VIS:
+                            hog_image = np.uint8(hog_image)
+                            hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
+                            cv2.imshow('hog', hog_image)
+
+                        #TODO Añadir histograma en sequencia
+                    
+                    else:
+                        flow_count = flow_count + 1
+                        
+                        if flow_count == 1:
+                            flow = CTTE * flowFB
+                        else:
+                            flow += CTTE * flowFB
 
                 frame_i =  frame_i + 1
             
             # Break the loop
             else: 
                 break
+
+        cv2.destroyAllWindows()
 
         # End framgnet processing
 
