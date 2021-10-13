@@ -6,6 +6,7 @@ import re, random
 import cv2
 import numpy as np
 import torch
+from tqdm import tqdm
 
 # Ours
 
@@ -42,9 +43,9 @@ def getROI(frame, coco_pred, padding, width, height, flow):
 
                 averages.append(np.average(v))
 
-            print(averages)
+            #print(averages)
             most_flow_index = np.argmax(averages)
-            print(most_flow_index)
+            #print(most_flow_index)
             
         x1, y1, x2, y2 = pots[most_flow_index]
 
@@ -75,7 +76,7 @@ def main():
     ROI_DIM = 250
     DET_PAD = 0
 
-    VIS = True
+    FRAMES_PER_SEQ = 50
 
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")
@@ -83,15 +84,19 @@ def main():
     parser.add_argument("out_file", type=str, default="out.csv", help="Save training data")
     parser.add_argument('-i',"--std_inp", type=str, nargs='?', help="Get the imput from commands instad on the execution")
     parser.add_argument('-r',"--random_order", action="store_true", help="Random order of video framgets to save")
+    parser.add_argument('-vis',"--visualize", action="store_true", help="Visualize the HOG and ROI")
     parser.add_argument('-mf',"--max_fragments", type=int, default=None, help="Max number of fragments to save")
     parser.add_argument('-p',"--padding", type=int, default=DET_PAD, help="Padding for the dettection zone")
     parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
+    parser.add_argument('-f',"--frames", type=int, default=FRAMES_PER_SEQ, help="Frames per sequence")
 
     args = parser.parse_args()
     out_file = args.out_file
 
     max_out_frags = args.max_fragments
     random_order = args.random_order
+
+    VIS = args.visualize
     
     file1 = args.json_dir
 
@@ -115,6 +120,12 @@ def main():
     words = [x.strip() for x in words.split(',')]
     print("Classes: ", words)
 
+    # Save metadata
+    metafile = out_file.split('.')[0] + "_metadata.txt"
+    with open(metafile, "w") as f:
+        for idx, class_name in enumerate(words):
+            f.write(str(idx) + " : " + class_name + "\n")
+
     video_ids = {}
     video_data = {}
     for tag, value in zip(data1['metadata'], data1['metadata'].values()):
@@ -135,7 +146,9 @@ def main():
                 if vid not in video_data:
                     video_data[vid] = []
 
-                video_data[vid].append(value)
+                to_append = value
+                to_append['match'] = words.index(word)
+                video_data[vid].append(to_append)
                 break
 
     #videos = dict(sorted(video_ids.items(), reverse=False))
@@ -152,12 +165,13 @@ def main():
         videoPath = getVidPath(data1, localpath, str(vid)) 
         for elem in data:
             if len(elem['z']) == 2:
-                fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vpath':videoPath})
+                fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vpath':videoPath, 'class':elem['match']})
 
     if random_order:
         random.shuffle(fragments)
 
-    fout = open(out_file, "w")
+    fout = open(out_file, "ab")
+    fout.truncate(0)
 
     # Initialize coco predictor
     from detectron2 import model_zoo
@@ -175,6 +189,9 @@ def main():
     cfg_coco.MODEL.WEIGHTS = MODEL_COCO
     coco_predictor = DefaultPredictor(cfg_coco)
 
+    total_fragments = len(fragments) if max_out_frags is None else max_out_frags
+
+    t = tqdm(total=total_fragments)
     for frag in fragments:
 
         # Create a VideoCapture object and some useful data
@@ -190,6 +207,10 @@ def main():
         init_frame = int(frag['time'][0] * fps)
         final_frame = int(frag['time'][1] * fps)
         #frame_no = init_frame/frame_count
+
+        if final_frame - init_frame < args.frames:
+            t.update()
+            continue
 
         action_noum = frag['act']
 
@@ -207,11 +228,10 @@ def main():
         
         # Read until video is completed
         frame_i = init_frame
+        final_frame = frame_i + args.frames
 
         # Corners for ROI
         roix1, roix2, roiy1, roiy2 = 0,0,0,0
-
-        sequencia = [[]]
 
         roi_window = None
         not_roi_count = 0
@@ -224,6 +244,8 @@ def main():
         # First frame for flow
         ret, frame = cap.read()
         last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        sequence = []
         while(cap.isOpened() and not_roi_count < 5):
             # Capture frame-by-frame
             ret, frame = cap.read()
@@ -253,6 +275,7 @@ def main():
                 else:
 
                     img_roi = frame[tuple(roi_window)]
+                    img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
                     #img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
 
                     # Visualization
@@ -266,16 +289,21 @@ def main():
                         flow_count = 0
 
                         roi_flow = flow[tuple(roi_window)]
+                        roi_flow = cv2.resize(roi_flow,(args.dimension,args.dimension))
                         modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-                        normalized_blocks, hog_image = mi_hog.hog(modulo, argumento2)
+                        normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+                                                                cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
 
                         # Visualization
                         if VIS:
+                            hog_image = normalized_blocks[1]
                             hog_image = np.uint8(hog_image)
                             hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
                             cv2.imshow('hog', hog_image)
+                            normalized_blocks = normalized_blocks[0]
 
-                        #TODO Añadir histograma en sequencia
+                        #Add hog features to sequence
+                        sequence.append(normalized_blocks)
                     
                     else:
                         flow_count = flow_count + 1
@@ -295,18 +323,18 @@ def main():
 
         # End framgnet processing
 
-        #TODO Escribir secuencia y la classe (action)
-        sequencia = "TODO"
-        fout.write(sequencia + action + "\n")
+        #Write sequence and action
+        class_id = frag['class']
+        X = [sequence, float(class_id)]
+
+        np.savez(fout, X)
         
         cap.release()
         frag_count = frag_count + 1
+        t.update()
 
         if max_out_frags is not None and frag_count >= max_out_frags:
             break
-
-        
-
 
     # Closing file
     fout.close()
