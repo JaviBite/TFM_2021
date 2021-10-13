@@ -45,43 +45,55 @@ def get_sequences(n_sequences, n_timesteps, size_elem):
     return seqX, seqY
 
 
+# Load data
+file1 = '../out.npz'
+files = np.load(file1, allow_pickle=True)
+X, y = files['a'], files['b']
+y = y.reshape((len(y), 1,))
+
 # define problem
-n_timesteps = 10
-n_sequences = 500
-size_elem = (16,16,8) # 16x16 hog cells and 8 directions
-features = size_elem[0]*size_elem[1]*size_elem[2]
+n_timesteps =  X.shape[1]
+n_sequences =  X.shape[0]
+size_elem = (16,16,3,3,9) # 16x16 hog cells and 8 directions
+features = X.shape[2]
 
 # define LSTM
 model = Sequential()
-model.add(Bidirectional(LSTM(50, return_sequences=False), input_shape=(n_timesteps, features)))
+model.add(Bidirectional(LSTM(100, return_sequences=False), input_shape=(n_timesteps, features)))
 #model.add(TimeDistributed(Dense(1, activation= 'sigmoid')))
 model.add(Dense(1, activation= 'sigmoid'))
 model.compile(loss= 'binary_crossentropy' , optimizer= 'adam' , metrics=[ 'acc' ])
 print(model.summary())
 
 # train LSTM
-X, y = get_sequences(n_sequences, 10, size_elem)
+#X, y = get_sequences(n_sequences, 10, size_elem)
+
 print(X.shape)
 print(y.shape)
 
-model.fit(X, y, epochs=1, batch_size=10)
+print("Num sequences: ",len(y))
+for i in range(1):
+    count = np.sum(y == i)
+    print("Class ",i,":",)
+
+model.fit(X, y, epochs=10, batch_size=10)
 
 # evaluate LSTM
-X, y = get_sequences(100, n_timesteps, size_elem)
+#X, y = get_sequences(100, n_timesteps, size_elem)
 loss, acc = model.evaluate(X, y, verbose=0)
 print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
 
 # make predictions
 for _ in range(10):
-    X, y = get_sequences(1, n_timesteps, size_elem)
+    #X, y = get_sequences(1, n_timesteps, size_elem)
     
     # Deprecated removed function predict_classes
     # yhat = model.predict_classes(X, verbose=0)
 
-    predict_x=model.predict(X) 
+    predict_x=model.predict(X[0:10,:,:]) 
     yhat=np.round(predict_x,decimals=0)
 
     #exp, pred = y.reshape(n_timesteps), yhat.reshape(n_timesteps)
 
-    exp, pred = y, yhat
+    exp, pred = y[0:10], yhat
     print( 'y=%s, yhat=%s, correct=%s '% (exp, pred, array_equal(exp,pred)))

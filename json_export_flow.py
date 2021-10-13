@@ -8,6 +8,9 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+import warnings
+warnings.filterwarnings("ignore")
+
 # Ours
 
 from cv_scripts.pot_det import detect_pots
@@ -71,17 +74,17 @@ def main():
 
     #Default arguments
     FLOW_STEP = 2
-    FLOW_ACC = 4
+    FLOW_ACC = 4      # 4+1 frames acc
 
     ROI_DIM = 250
     DET_PAD = 0
 
-    FRAMES_PER_SEQ = 50
+    FRAMES_PER_SEQ = 100
 
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
-    parser.add_argument("out_file", type=str, default="out.csv", help="Save training data")
+    parser.add_argument("out_file", type=str, default="out", help="Save training data")
     parser.add_argument('-i',"--std_inp", type=str, nargs='?', help="Get the imput from commands instad on the execution")
     parser.add_argument('-r',"--random_order", action="store_true", help="Random order of video framgets to save")
     parser.add_argument('-vis',"--visualize", action="store_true", help="Visualize the HOG and ROI")
@@ -106,6 +109,7 @@ def main():
     # returns JSON object as 
     # a dictionary
     data1 = json.load(f1)
+    f1.close()
 
     if args.videos_folder == "none":
         localpath = data1['config']['file']['loc_prefix']['1']
@@ -170,9 +174,6 @@ def main():
     if random_order:
         random.shuffle(fragments)
 
-    fout = open(out_file, "ab")
-    fout.truncate(0)
-
     # Initialize coco predictor
     from detectron2 import model_zoo
     from detectron2.config import get_cfg
@@ -192,6 +193,8 @@ def main():
     total_fragments = len(fragments) if max_out_frags is None else max_out_frags
 
     t = tqdm(total=total_fragments)
+    X = []
+    y = []
     for frag in fragments:
 
         # Create a VideoCapture object and some useful data
@@ -209,7 +212,6 @@ def main():
         #frame_no = init_frame/frame_count
 
         if final_frame - init_frame < args.frames:
-            t.update()
             continue
 
         action_noum = frag['act']
@@ -323,11 +325,10 @@ def main():
 
         # End framgnet processing
 
-        #Write sequence and action
+        #Sequence and action
         class_id = frag['class']
-        X = [sequence, float(class_id)]
-
-        np.savez(fout, X)
+        y.append(class_id)
+        X.append(np.array(sequence))
         
         cap.release()
         frag_count = frag_count + 1
@@ -336,9 +337,14 @@ def main():
         if max_out_frags is not None and frag_count >= max_out_frags:
             break
 
-    # Closing file
-    fout.close()
-    f1.close()
+
+    # Write File
+    #X = X.reshape(total_fragments, 9*16*16*3*3, 1)
+
+    y = np.array(y)
+    X = np.array(X)
+
+    np.savez(out_file + ".npz", a=X, b=y)
 
 if __name__ == "__main__":
     main()
