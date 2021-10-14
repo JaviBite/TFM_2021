@@ -74,120 +74,122 @@ def getVidPath(jsondata, localpath, vid):
 def runFrag(frag, args, coco_predictor):
 
     # Create a VideoCapture object and some useful data
-        videoPath = frag['vpath']
-        cap = cv2.VideoCapture(videoPath)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = frame_count/fps
+    videoPath = frag['vpath']
+    cap = cv2.VideoCapture(videoPath)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = frame_count/fps
 
-        width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
-        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
+    width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
+    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
 
-        init_frame = int(frag['time'][0] * fps)
-        final_frame = int(frag['time'][1] * fps)
-        #frame_no = init_frame/frame_count
+    init_frame = int(frag['time'][0] * fps)
+    final_frame = int(frag['time'][1] * fps)
+    #frame_no = init_frame/frame_count
 
-        if final_frame - init_frame < args.frames:
-            cap.release()
-            return None
+    if final_frame - init_frame < args.frames:
+        cap.release()
+        return None
 
-        action_noum = frag['act']
+    action_noum = frag['act']
 
-        action = action_noum.split(" ")[0]
+    action = action_noum.split(" ")[0]
 
-        #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
-        #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
-        #The second argument defines the frame number in range 0.0-1.0
-        cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
-        
-        # Check if camera opened successfully
-        if (cap.isOpened()== False): 
-            print("Error opening video  file")
-            return None
-        
-        # Read until video is completed
-        frame_i = init_frame
-        final_frame = frame_i + args.frames
+    #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
+    #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
+    #The second argument defines the frame number in range 0.0-1.0
+    cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
+    
+    # Check if camera opened successfully
+    if (cap.isOpened()== False): 
+        print("Error opening video  file")
+        return None
+    
+    # Read until video is completed
+    frame_i = init_frame
+    final_frame = frame_i + args.frames
 
-        # Corners for ROI
-        roix1, roix2, roiy1, roiy2 = 0,0,0,0
+    # Corners for ROI
+    roix1, roix2, roiy1, roiy2 = 0,0,0,0
 
-        roi_window = None
-        not_roi_count = 0
+    roi_window = None
+    not_roi_count = 0
 
-        CTTE = 1 # Constat for CTTE * flow
+    CTTE = 1 # Constat for CTTE * flow
 
-        flow_count = 0
-        last_gray_frames = [None, None]
+    flow_count = 0
+    last_gray_frames = [None, None]
 
-        # First frame for flow
+    # First frame for flow
+    ret, frame = cap.read()
+    last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    sequence = []
+    while(cap.isOpened() and not_roi_count < 5):
+        # Capture frame-by-frame
         ret, frame = cap.read()
-        last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        sequence = []
-        while(cap.isOpened() and not_roi_count < 5):
-            # Capture frame-by-frame
-            ret, frame = cap.read()
-            if frame_i <= final_frame and ret == True: 
+        if frame_i <= final_frame and ret == True: 
 
-                # Update Last Frames
-                last_gray_frames[0] = last_gray_frames[1]
-                last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Update Last Frames
+            last_gray_frames[0] = last_gray_frames[1]
+            last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                #Calcular flujo optico
-                flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
-                                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+            #Calcular flujo optico
+            flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
+                            None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
-                #DONE Detectar la ROI una vez para todo el fragmento
-                if roi_window is None:
-                    roi = getROI(frame, coco_predictor, args.padding, width, height, flowFB)
+            #DONE Detectar la ROI una vez para todo el fragmento
+            if roi_window is None:
+                roi = getROI(frame, coco_predictor, args.padding, width, height, flowFB)
 
-                    if roi is not None:
+                if roi is not None:
 
-                        x1, y1, x2, y2 = roi
-                        roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
-                    
-                    else:
-
-                        not_roi_count = not_roi_count + 1
-
+                    x1, y1, x2, y2 = roi
+                    roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
+                
                 else:
 
-                    img_roi = frame[tuple(roi_window)]
-                    img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
-                    #img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
+                    not_roi_count = not_roi_count + 1
 
-                    #Acomular y hacer histograma
-                    if flow_count >= args.flow_acc:
-                        flow_count = 0
+            else:
 
-                        roi_flow = flow[tuple(roi_window)]
-                        roi_flow = cv2.resize(roi_flow,(args.dimension,args.dimension))
-                        modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-                        normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
-                                                                cells_per_block=(3, 3), block_norm='L2-Hys', visualize=False)
+                img_roi = frame[tuple(roi_window)]
+                img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
+                #img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
 
-                        #Add hog features to sequence
-                        sequence.append(normalized_blocks)
+                #Acomular y hacer histograma
+                if flow_count >= args.flow_acc:
+                    flow_count = 0
+
+                    roi_flow = flow[tuple(roi_window)]
+                    roi_flow = cv2.resize(roi_flow,(args.dimension,args.dimension))
+                    modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=False)
+
+                    #Add hog features to sequence
+                    sequence.append(normalized_blocks)
+                
+                else:
+                    flow_count = flow_count + 1
                     
+                    if flow_count == 1:
+                        flow = CTTE * flowFB
                     else:
-                        flow_count = flow_count + 1
-                        
-                        if flow_count == 1:
-                            flow = CTTE * flowFB
-                        else:
-                            flow += CTTE * flowFB
+                        flow += CTTE * flowFB
 
-                frame_i =  frame_i + 1
-            
-            # Break the loop
-            else: 
-                break
+            frame_i =  frame_i + 1
+        
+        # Break the loop
+        else: 
+            break
 
-        cv2.destroyAllWindows()
-        cap.release()
+    cap.release()
 
-        return (sequence, frag['class'])
+    if not_roi_count >= 5:
+        return None
+
+    return (sequence, frag['class'])
 
 def main():
 
@@ -325,7 +327,7 @@ def main():
     for i in range(0,len(fragments),MAX_WORKERS):
         
         multiple_results = []
-        for j in range(0,MAX_WORKERS)
+        for j in range(0,min(MAX_WORKERS,max_out_frags-frag_count)):
             if i+j < len(fragments):
                 multiple_results.append(pool.apply_async(runFrag, ([fragments[i+j], args, coco_predictor])))
 
