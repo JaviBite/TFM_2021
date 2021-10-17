@@ -215,7 +215,8 @@ def main():
     parser.add_argument('-p',"--padding", type=int, default=DET_PAD, help="Padding for the dettection zone")
     parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
     parser.add_argument('-f',"--frames", type=int, default=FRAMES_PER_SEQ, help="Frames per sequence")
-    parser.add_argument('-fa',"--flow_acc", type=int, default=FLOW_ACC, help="Flow frames accomulation")
+    parser.add_argument('-fa',"--flow_acc", type=int, default=FLOW_ACC, help="Flow frames accomulation")    
+    parser.add_argument('-acc',"--flow_accomulate", type=int, default=FLOW_ACC, help="Flows to acommulate before HOG processing")
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -224,6 +225,8 @@ def main():
     random_order = args.random_order
 
     VIS = args.visualize
+
+    FLOW_ACC = args.flow_accomulate
     
     file1 = args.json_dir
 
@@ -309,7 +312,7 @@ def main():
 
     cfg_coco = get_cfg()
     cfg_coco.merge_from_file(CONFIG_COCO)
-    cfg_coco.MODEL.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    cfg_coco.MODEL.DEVICE = 'cpu'#'cuda' if torch.cuda.is_available() else 'cpu'
     cfg_coco.MODEL.ROI_HEADS.SCORE_THRESH_TEST = SCORE_THRESH_TEST  # set threshold for this model
     cfg_coco.MODEL.WEIGHTS = MODEL_COCO
     coco_predictor = DefaultPredictor(cfg_coco)

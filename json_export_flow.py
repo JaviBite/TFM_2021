@@ -92,6 +92,7 @@ def main():
     parser.add_argument('-p',"--padding", type=int, default=DET_PAD, help="Padding for the dettection zone")
     parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
     parser.add_argument('-f',"--frames", type=int, default=FRAMES_PER_SEQ, help="Frames per sequence")
+    parser.add_argument('-acc',"--flow_accomulate", type=int, default=FLOW_ACC, help="Flows to acommulate before HOG processing")
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -100,6 +101,8 @@ def main():
     random_order = args.random_order
 
     VIS = args.visualize
+
+    FLOW_ACC = args.flow_accomulate
     
     file1 = args.json_dir
 

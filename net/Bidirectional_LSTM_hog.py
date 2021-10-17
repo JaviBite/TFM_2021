@@ -57,6 +57,7 @@ n_sequences =  X.shape[0]
 size_elem = (16,16,3,3,9) # 16x16 hog cells and 8 directions
 features = X.shape[2]
 
+print(features)
 # define LSTM
 model = Sequential()
 model.add(Bidirectional(LSTM(100, return_sequences=False), input_shape=(n_timesteps, features)))
@@ -72,9 +73,9 @@ print(X.shape)
 print(y.shape)
 
 print("Num sequences: ",len(y))
-for i in range(1):
+for i in range(2):
     count = np.sum(y == i)
-    print("Class ",i,":",)
+    print("Class ",i,":", count)
 
 model.fit(X, y, epochs=10, batch_size=10)
 
@@ -84,16 +85,15 @@ loss, acc = model.evaluate(X, y, verbose=0)
 print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
 
 # make predictions
-for _ in range(10):
-    #X, y = get_sequences(1, n_timesteps, size_elem)
-    
-    # Deprecated removed function predict_classes
-    # yhat = model.predict_classes(X, verbose=0)
+#X, y = get_sequences(1, n_timesteps, size_elem)
 
-    predict_x=model.predict(X[0:10,:,:]) 
-    yhat=np.round(predict_x,decimals=0)
+# Deprecated removed function predict_classes
+# yhat = model.predict_classes(X, verbose=0)
 
-    #exp, pred = y.reshape(n_timesteps), yhat.reshape(n_timesteps)
+predict_x=model.predict(X[0:10,:,:]) 
+yhat=np.round(predict_x,decimals=0)
 
-    exp, pred = y[0:10], yhat
-    print( 'y=%s, yhat=%s, correct=%s '% (exp, pred, array_equal(exp,pred)))
+#exp, pred = y.reshape(n_timesteps), yhat.reshape(n_timesteps)
+
+exp, pred = y[0:10], yhat
+print( 'y=%s, yhat=%s, correct=%s '% (exp, pred, array_equal(exp,pred)))
