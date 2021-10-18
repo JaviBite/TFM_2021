@@ -331,7 +331,7 @@ def main():
 
         # End framgnet processing
 
-        if len(sequence) != args.frames:
+        if len(sequence) != int(args.frames/args.flow_acc):
             continue
 
         #Sequence and action
