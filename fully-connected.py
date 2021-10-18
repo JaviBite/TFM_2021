@@ -17,7 +17,8 @@ metadata_path = 'D:\Miguel\out_flow_f60_mf50_metadata.txt'
 
 def load_hog():
     print('Loading dataset...')
-    x_train,y_train,x_test,y_test = [],[],[],[]
+    x_train = x_test = np.array([[0]*num_tiles])
+    y_train = y_test = ([])
 
     print('Opening metadata file...')
     md_file = open(metadata_path)
@@ -31,12 +32,20 @@ def load_hog():
     print('Loading training data...')
     data = np.load(data_path)
 
-    num_samples = len(data['b'])
-    x_test = np.squeeze(data['a'][:(num_samples//10+1)])
-    x_train = np.squeeze(data['a'][(num_samples//10+1):])
-    y_test = data['b'][:(num_samples//10+1)]
-    y_train = data['b'][(num_samples//10+1):]
+    print('Separating test data...')
+    for (i,_) in classes:
+        x = np.squeeze(data['a'][:])
+        y = data['b'][:]
+        x = x[y==i]
+        y = y[y==i]
+        num_samples = len(y)
+        x_test = np.append(x_test,x[:(num_samples//10+1)],axis=0)
+        y_test.append(y[:(num_samples//10+1)])
+        x_train = np.append(x_train,x[(num_samples//10+1):],axis=0)
+        y_train.append(y[(num_samples//10+1):])
 
+    x_test = x_test[1:]
+    x_train = x_train[1:]
     print('Done')
 
     return (x_train,y_train),(x_test,y_test)
