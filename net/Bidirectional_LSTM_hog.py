@@ -4,6 +4,8 @@ Created on Mon Feb 24 09:34:36 2020
 
 @author: cvlab
 """
+import sys
+
 from random import random
 from numpy import array
 from numpy import cumsum
@@ -11,7 +13,7 @@ from numpy import array_equal
 import numpy as np
 from keras.models import Sequential
 from keras.layers import LSTM
-from keras.layers import Dense
+from keras.layers import Dense, Dropout, Flatten
 from keras.layers import TimeDistributed
 from keras.layers import Bidirectional
 #
@@ -46,23 +48,36 @@ def get_sequences(n_sequences, n_timesteps, size_elem):
 
 
 # Load data
-file1 = '../out.npz'
+file1 = sys.argv[1]
 files = np.load(file1, allow_pickle=True)
-X, y = files['a'], files['b']
-y = y.reshape((len(y), 1,))
+X, labels = files['a'], files['b']
+
+num_classes = 2
+y = []
+for yi in labels:
+    to_append = np.zeros(num_classes)
+    to_append[yi] = 1
+    y.append(to_append)
+
+y = np.array(y).reshape((len(labels), num_classes))
+
+print("X Shape: ", X.shape)
+print("Y Shape: ", y.shape)
 
 # define problem
 n_timesteps =  X.shape[1]
 n_sequences =  X.shape[0]
-size_elem = (16,16,3,3,9) # 16x16 hog cells and 8 directions
 features = X.shape[2]
 
 print(features)
 # define LSTM
 model = Sequential()
 model.add(Bidirectional(LSTM(100, return_sequences=False), input_shape=(n_timesteps, features)))
-#model.add(TimeDistributed(Dense(1, activation= 'sigmoid')))
-model.add(Dense(1, activation= 'sigmoid'))
+model.add(Dropout(0.2))
+model.add(Flatten())
+model.add(Dense(256, activation="relu"))
+model.add(Dropout(0.3))
+model.add(Dense(num_classes, activation = "softmax"))
 model.compile(loss= 'binary_crossentropy' , optimizer= 'adam' , metrics=[ 'acc' ])
 print(model.summary())
 
@@ -72,9 +87,9 @@ print(model.summary())
 print(X.shape)
 print(y.shape)
 
-print("Num sequences: ",len(y))
+print("Num sequences: ",len(labels))
 for i in range(2):
-    count = np.sum(y == i)
+    count = np.sum(labels == i)
     print("Class ",i,":", count)
 
 model.fit(X, y, epochs=10, batch_size=10)

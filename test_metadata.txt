@@ -1,0 +1,2 @@
+0 : remover
+1 : poner

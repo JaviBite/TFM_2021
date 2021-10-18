@@ -43,8 +43,8 @@ from skimage.measure import label, regionprops, regionprops_table
     
 from scipy.spatial import distance
    
-from utils.skeletonize import skeletonize
-from utils.crossing_number import calculate_minutiaes
+from libs.skeletonize import skeletonize
+from libs.crossing_number import calculate_minutiaes
 
 rng.seed(12345)
 STEP = 4
@@ -1141,304 +1141,307 @@ def convierte_tuple2(ee):
 
 
 
+def main():
+
+    ############################################################################
+    # INICIO -- inicializacion de variables y demas
+    ############################################################################
 
 
-############################################################################
-# INICIO -- inicializacion de variables y demas
-############################################################################
+    # video = 'DCA6327319E6_2020_07_03_211702.mp4'
+    # frame=6945
+
+    # video = 'DCA6327319E6_2020_09_24_130541.mp4'
+    # frame=200
+
+    # video = 'DCA6327319E6_2020_07_01_213929.mp4'
+    # frame=100
+
+    # video = 'DCA6327319E6_2020_11_21_135628.mp4'
+    # frame=40
 
 
-# video = 'DCA6327319E6_2020_07_03_211702.mp4'
-# frame=6945
-
-# video = 'DCA6327319E6_2020_09_24_130541.mp4'
-# frame=200
-
-# video = 'DCA6327319E6_2020_07_01_213929.mp4'
-# frame=100
-
-# video = 'DCA6327319E6_2020_11_21_135628.mp4'
-# frame=40
+    # video = 'DCA6327319BA_2021_01_21_110822.mp4'
+    # tiempo = ' un minuto y 33 sgs = 93sgs'
+    # fps = 25
+    # frame=fps*93
 
 
-# video = 'DCA6327319BA_2021_01_21_110822.mp4'
-# tiempo = ' un minuto y 33 sgs = 93sgs'
-# fps = 25
-# frame=fps*93
+    # video = 'DCA6327319E6_2020_09_07_140251.mp4'
+    # tiempo = ' 11 minutos y 59 sgs '
+    # fps = 25
+    # frame=18031
 
 
-# video = 'DCA6327319E6_2020_09_07_140251.mp4'
-# tiempo = ' 11 minutos y 59 sgs '
-# fps = 25
-# frame=18031
+    # video = 'DCA6327319E6_2020_09_24_130541.mp4'
+    # frame=3702 - 30
 
 
-# video = 'DCA6327319E6_2020_09_24_130541.mp4'
-# frame=3702 - 30
+    # video =  'DCA6327319BA_2021_01_21_110822.mp4'
+    # frame  = 7728
+
+    # cap = cv.VideoCapture("D:/Carlos/Proyectos investigacion/BSH/Videos/out_remover/remover_1.avi")
+    # frame = 1
+
+    # cap = cv.VideoCapture("D:/Carlos/Proyectos investigacion/BSH/Videos/videos de campana/DCA6327319E6_2020_09_24_130541.mp4")
 
 
-# video =  'DCA6327319BA_2021_01_21_110822.mp4'
-# frame  = 7728
-
-# cap = cv.VideoCapture("D:/Carlos/Proyectos investigacion/BSH/Videos/out_remover/remover_1.avi")
-# frame = 1
-
-# cap = cv.VideoCapture("D:/Carlos/Proyectos investigacion/BSH/Videos/videos de campana/DCA6327319E6_2020_09_24_130541.mp4")
-
-
-video = 'DCA6327319E6_2020_09_24_130541.mp4'
-frame=3699  
-    
-
-# video = 'DCA6327319E6_2020_09_06_133156.mp4'
-# # tiempo = ' 26 minutos y 48 sgs '
-# # fps = 25
-# # frame=fps*(25*60+34)
-
-# frame=38350
-
-cap = cv.VideoCapture("D:/Carlos/Proyectos investigacion/BSH/Videos/videos de campana/videos 2020/" + video)
-
-
-
-# video = 'remover_3.avi'
-# frame = 10
-# cap = cv.VideoCapture("D:/Carlos/Proyectos investigacion/BSH/Videos/out_remover/" + video)
-
-
-if not cap.isOpened():
-    print('Unable to open' )
-    exit(0)  
-
-# numero de fotogramas
-total = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
-# fotograma actual en ms
-videoTimestamp = int(cap.get(cv.CAP_PROP_POS_MSEC))   
-# fotograma actual s
-videoFrameNumber = int(cap.get(cv.CAP_PROP_POS_FRAMES))  
-# # For example, to start reading 101th frame of the video you can use:
-cap.set(cv.CAP_PROP_POS_FRAMES, frame-1)
-
-fps = int(cap.get(cv.CAP_PROP_FPS))
-
-
-
-ret, img = cap.read()
-#calculate the x percent of original dimensions
-scale_percent = 1
-width = int(img.shape[1] * scale_percent )
-height = int(img.shape[0] * scale_percent )
-
-dsize = (width, height)
-
-
-fourcc = cv.VideoWriter_fourcc(*'mp4v') # set video extension type
-codec = cv.VideoWriter_fourcc(*'DIVX')
-save_as = "D:/Carlos/python/data/clips/output"
-video_writer1 = None
-video_writer2 = None
-video_writer3 = None
-
-source_window = 'Source'
-cv.namedWindow(source_window, cv.WINDOW_AUTOSIZE)
-
-
-blurri = 5
-
-todas_elipses = []
-
-elipses_totales = []
-num_elipses_totales = []
-
-colors = np.int8( list(np.ndindex(2, 2, 2)) ) * 255
-
-
-
-############################################################################
-# INICIO -- identificacion automatica de las elipses a partir de 10 frames
-############################################################################
-
-idx = 0
-for idx in range(10):         
-    cap.set(cv.CAP_PROP_POS_FRAMES, frame+idx)    
-    print('vamos por la imagen: ', frame+idx) 
-    
-    ret, img = cap.read()    
-    if not ret:
-        print('Unable to open' )        
-        # cv.destroyAllWindows()
-        cap.release()
-        break
-    else:            
-        src_gray2 = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
-        src_gray2 = cv.blur(src_gray2, (blurri,blurri))
-        # subrutina principal
-        auxx = thresh_callback(100, src_gray2, img, todas_elipses, video_writer1, [])         
-        elipses_totales.append(auxx) 
-        num_elipses_totales.append(len(auxx))        
-        if len(auxx)==0:
-            print('lista vacia')
-            vis = cv.cvtColor(src_gray2, cv.COLOR_GRAY2BGR)
-            cv.rectangle(vis, (10, 2), (100,20), (255,255,255), -1)
-            cv.putText(vis, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
-            cv.imshow(source_window, vis)               
-        else:
-            for e in range(len(auxx)):
-                ellip=auxx[e]
-                color1 = colors[1+e]
-                # Convert numpy array to tuple
-                color = (np.int(color1[0]), np.int(color1[1]), np.int(color1[2]))            
-                cv.ellipse(img, ellip, color, 4)
-
-            cv.rectangle(img, (10, 2), (100,20), (255,255,255), -1)
-            cv.putText(img, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
-            cv.imshow(source_window, img)
-    
-    
-if not video_writer1:        
-    video_writer1 = cv.VideoWriter(save_as + '/elipses1_' +str(frame)+'_'+video, fourcc, 10.0, dsize) # path_name, video type, frame rate, (image_width, image_height)            video_writer1 = cv2.VideoWriter(save_as + '/OF_hog_1300 DCA6327319E6_2020_07_03_211702_2_4.mp4', codec, 20.0, (width, height))
-if not video_writer2:        
-    video_writer2 = cv.VideoWriter(save_as + '/elipses2_' +str(frame)+'_'+video, fourcc, 10.0, dsize) # path_name, video type, frame rate, (image_width, image_height)            video_writer1 = cv2.VideoWriter(save_as + '/OF_hog_1300 DCA6327319E6_2020_07_03_211702_2_4.mp4', codec, 20.0, (width, height))
-if not video_writer3:        
-    video_writer3 = cv.VideoWriter(save_as + '/elipses3_' +str(frame)+'_'+video, fourcc, 10.0, dsize) # path_name, video type, frame rate, (image_width, image_height)            video_writer1 = cv2.VideoWriter(save_as + '/OF_hog_1300 DCA6327319E6_2020_07_03_211702_2_4.mp4', codec, 20.0, (width, height))
+    video = 'DCA6327319E6_2020_09_24_130541.mp4'
+    frame=3699  
         
 
+    # video = 'DCA6327319E6_2020_09_06_133156.mp4'
+    # # tiempo = ' 26 minutos y 48 sgs '
+    # # fps = 25
+    # # frame=fps*(25*60+34)
 
-############################################################################
-# INICIO -- Encontramos esas elipses  # 13-10-21
-############################################################################
+    # frame=38350
 
-num_elips = np.max(num_elipses_totales)
-inicio = 0
-for i in range(len(elipses_totales)):
-    if num_elipses_totales[i] == num_elips:
-        break
-    else:
-        inicio = inicio+1
-        
-# reordeno para q la primera tenga todas las elipses encontradas
-if inicio > 0: # reordeno
-    new_elipses_totales = []
-    for i in range(inicio, len(elipses_totales)):
-        new_elipses_totales.append(elipses_totales[i])
-    for i in range(inicio):
-        new_elipses_totales.append(elipses_totales[i])
-else:
-    new_elipses_totales = elipses_totales
-    
-# comparo el resto con la primera
-compara = np.zeros((len(elipses_totales), num_elips),  dtype=np.int32)  
-cuantas_iguales = np.ones(num_elips,  dtype=np.int32)   
-for i in range(len(new_elipses_totales[0])): # max = num_elips
-    ellip1 = new_elipses_totales[0][i]
-    compara[0][i] = 1+i # consigo misma
-    for j in range(1, len(elipses_totales)):
-        for k in range(len(new_elipses_totales[j])):
-            ellip2 = new_elipses_totales[j][k]
-            if compara_dos_elipses(ellip1, ellip2, 1) == True:
-                compara[j][k] = 1+i
-                cuantas_iguales[i] +=1
-                
-print(compara)                
-          
-todas_elipses = [] 
-print(new_elipses_totales[0])
-for i in range(num_elips): # max = num_elips
-    elipse_mediana = np.zeros((cuantas_iguales[i], 5),  dtype=np.int32) 
-    idx=0
-    for j in range(len(elipses_totales)):
-        for k in range(num_elips):
-            if compara[j][k] == 1+i:
-                aux = k 
-                ellipse = new_elipses_totales[j][aux]
-                elipse_mediana[idx][0]  = ellipse[0][0]
-                elipse_mediana[idx][1]  = ellipse[0][1]
-                elipse_mediana[idx][2]  = ellipse[1][0]
-                elipse_mediana[idx][3]  = ellipse[1][1]
-                elipse_mediana[idx][4]  = ellipse[2]
-                idx +=1
-                              
-    ee = np.median(elipse_mediana,0)
-    todas_elipses.append(convierte_tuple2(ee))
-
-print('\n')    
-print(todas_elipses)
+    cap = cv.VideoCapture("E:/tfm/actions/videos/" + video)
 
 
 
+    # video = 'remover_3.avi'
+    # frame = 10
+    # cap = cv.VideoCapture("D:/Carlos/Proyectos investigacion/BSH/Videos/out_remover/" + video)
 
-############################################################################
-# PRINCIPAL -- una vez detectadas:todas_elipses, se buscan en los fotogramas
-############################################################################
 
-elipses_totales = []
+    if not cap.isOpened():
+        print('Unable to open' )
+        exit(0)  
 
-for idx in range(200):
-       
-    PORCENTAJE = 1.8
-    # el porcentaje de solapamiento es menor dado que parto de las elipses
-    
-    cap.set(cv.CAP_PROP_POS_FRAMES, frame+idx)
-    
-    print('vamos por la imagen: ', frame+idx)
-       
+    # numero de fotogramas
+    total = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
+    # fotograma actual en ms
+    videoTimestamp = int(cap.get(cv.CAP_PROP_POS_MSEC))   
+    # fotograma actual s
+    videoFrameNumber = int(cap.get(cv.CAP_PROP_POS_FRAMES))  
+    # # For example, to start reading 101th frame of the video you can use:
+    cap.set(cv.CAP_PROP_POS_FRAMES, frame-1)
+
+    fps = int(cap.get(cv.CAP_PROP_FPS))
+
+
+
     ret, img = cap.read()
-    
-    if not ret:
-        print('Unable to open' )        
-        # cv.destroyAllWindows()
-        cap.release()
-        video_writer1 and video_writer1.release()
-        video_writer2 and video_writer2.release()   
-        video_writer3 and video_writer3.release()   
-        break
-    else:            
-        src_gray2 = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
-        src_gray2 = cv.blur(src_gray2, (blurri,blurri))
-    
-        auxx = thresh_callback(100, src_gray2, img, todas_elipses, video_writer1, video_writer3)         
-        elipses_totales.append(len(auxx)) 
-        
-        if len(auxx)==0:
-            print('lista vacia')
-            vis = cv.cvtColor(src_gray2, cv.COLOR_GRAY2BGR)
-            cv.rectangle(vis, (10, 2), (100,20), (255,255,255), -1)
-            cv.putText(vis, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
-            cv.imshow(source_window, vis)               
-            video_writer2.write(vis) 
-        else:
-            for e in range(len(auxx)):
-                ellip=auxx[e]
-                for f in range(len(todas_elipses)):
-                    ellip2 = todas_elipses[f]
-                    if compara_dos_elipses(ellip, ellip2, 1) == True:
-                        color1 = colors[1+f]
-                # Convert numpy array to tuple
-                color = (np.int(color1[0]), np.int(color1[1]), np.int(color1[2]))            
-                # color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256)) 
-                cv.ellipse(img, ellip, color, 4)
+    #calculate the x percent of original dimensions
+    scale_percent = 1
+    width = int(img.shape[1] * scale_percent )
+    height = int(img.shape[0] * scale_percent )
 
-            cv.rectangle(img, (10, 2), (100,20), (255,255,255), -1)
-            cv.putText(img, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
-            cv.imshow(source_window, img)
-            video_writer2.write(img) 
-    
-    
-    keyboard = cv.waitKey(1) & 0xFF
-    if  keyboard == 'q' or keyboard == 27:
-        cap.release()
-        video_writer1 and video_writer1.release()
-        video_writer2 and video_writer2.release()
-        video_writer3 and video_writer3.release()   
-        print('Total de elipses: ', np.sum(elipses_totales))
-        break
-    
-# cv.destroyAllWindows()
-cap.release()
-video_writer1 and video_writer1.release()
-video_writer2 and video_writer2.release()
-video_writer3 and video_writer3.release()   
-print('Total de elipses: ', np.sum(elipses_totales))    
+    dsize = (width, height)
+
+
+    fourcc = cv.VideoWriter_fourcc(*'mp4v') # set video extension type
+    codec = cv.VideoWriter_fourcc(*'DIVX')
+    save_as = "D:/Carlos/python/data/clips/output"
+    video_writer1 = None
+    video_writer2 = None
+    video_writer3 = None
+
+    source_window = 'Source'
+    cv.namedWindow(source_window, cv.WINDOW_AUTOSIZE)
+
+
+    blurri = 5
+
+    todas_elipses = []
+
+    elipses_totales = []
+    num_elipses_totales = []
+
+    colors = np.int8( list(np.ndindex(2, 2, 2)) ) * 255
+
+
+
+    ############################################################################
+    # INICIO -- identificacion automatica de las elipses a partir de 10 frames
+    ############################################################################
+
+    idx = 0
+    for idx in range(10):         
+        cap.set(cv.CAP_PROP_POS_FRAMES, frame+idx)    
+        print('vamos por la imagen: ', frame+idx) 
+        
+        ret, img = cap.read()    
+        if not ret:
+            print('Unable to open' )        
+            # cv.destroyAllWindows()
+            cap.release()
+            break
+        else:            
+            src_gray2 = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+            src_gray2 = cv.blur(src_gray2, (blurri,blurri))
+            # subrutina principal
+            auxx = thresh_callback(100, src_gray2, img, todas_elipses, video_writer1, [])         
+            elipses_totales.append(auxx) 
+            num_elipses_totales.append(len(auxx))        
+            if len(auxx)==0:
+                print('lista vacia')
+                vis = cv.cvtColor(src_gray2, cv.COLOR_GRAY2BGR)
+                cv.rectangle(vis, (10, 2), (100,20), (255,255,255), -1)
+                cv.putText(vis, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
+                cv.imshow(source_window, vis)               
+            else:
+                for e in range(len(auxx)):
+                    ellip=auxx[e]
+                    color1 = colors[1+e]
+                    # Convert numpy array to tuple
+                    color = (np.int(color1[0]), np.int(color1[1]), np.int(color1[2]))            
+                    cv.ellipse(img, ellip, color, 4)
+
+                cv.rectangle(img, (10, 2), (100,20), (255,255,255), -1)
+                cv.putText(img, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
+                cv.imshow(source_window, img)
+        
+        
+    if not video_writer1:        
+        video_writer1 = cv.VideoWriter(save_as + '/elipses1_' +str(frame)+'_'+video, fourcc, 10.0, dsize) # path_name, video type, frame rate, (image_width, image_height)            video_writer1 = cv2.VideoWriter(save_as + '/OF_hog_1300 DCA6327319E6_2020_07_03_211702_2_4.mp4', codec, 20.0, (width, height))
+    if not video_writer2:        
+        video_writer2 = cv.VideoWriter(save_as + '/elipses2_' +str(frame)+'_'+video, fourcc, 10.0, dsize) # path_name, video type, frame rate, (image_width, image_height)            video_writer1 = cv2.VideoWriter(save_as + '/OF_hog_1300 DCA6327319E6_2020_07_03_211702_2_4.mp4', codec, 20.0, (width, height))
+    if not video_writer3:        
+        video_writer3 = cv.VideoWriter(save_as + '/elipses3_' +str(frame)+'_'+video, fourcc, 10.0, dsize) # path_name, video type, frame rate, (image_width, image_height)            video_writer1 = cv2.VideoWriter(save_as + '/OF_hog_1300 DCA6327319E6_2020_07_03_211702_2_4.mp4', codec, 20.0, (width, height))
+            
+
+
+    ############################################################################
+    # INICIO -- Encontramos esas elipses  # 13-10-21
+    ############################################################################
+
+    num_elips = np.max(num_elipses_totales)
+    inicio = 0
+    for i in range(len(elipses_totales)):
+        if num_elipses_totales[i] == num_elips:
+            break
+        else:
+            inicio = inicio+1
+            
+    # reordeno para q la primera tenga todas las elipses encontradas
+    if inicio > 0: # reordeno
+        new_elipses_totales = []
+        for i in range(inicio, len(elipses_totales)):
+            new_elipses_totales.append(elipses_totales[i])
+        for i in range(inicio):
+            new_elipses_totales.append(elipses_totales[i])
+    else:
+        new_elipses_totales = elipses_totales
+        
+    # comparo el resto con la primera
+    compara = np.zeros((len(elipses_totales), num_elips),  dtype=np.int32)  
+    cuantas_iguales = np.ones(num_elips,  dtype=np.int32)   
+    for i in range(len(new_elipses_totales[0])): # max = num_elips
+        ellip1 = new_elipses_totales[0][i]
+        compara[0][i] = 1+i # consigo misma
+        for j in range(1, len(elipses_totales)):
+            for k in range(len(new_elipses_totales[j])):
+                ellip2 = new_elipses_totales[j][k]
+                if compara_dos_elipses(ellip1, ellip2, 1) == True:
+                    compara[j][k] = 1+i
+                    cuantas_iguales[i] +=1
+                    
+    print(compara)                
+            
+    todas_elipses = [] 
+    print(new_elipses_totales[0])
+    for i in range(num_elips): # max = num_elips
+        elipse_mediana = np.zeros((cuantas_iguales[i], 5),  dtype=np.int32) 
+        idx=0
+        for j in range(len(elipses_totales)):
+            for k in range(num_elips):
+                if compara[j][k] == 1+i:
+                    aux = k 
+                    ellipse = new_elipses_totales[j][aux]
+                    elipse_mediana[idx][0]  = ellipse[0][0]
+                    elipse_mediana[idx][1]  = ellipse[0][1]
+                    elipse_mediana[idx][2]  = ellipse[1][0]
+                    elipse_mediana[idx][3]  = ellipse[1][1]
+                    elipse_mediana[idx][4]  = ellipse[2]
+                    idx +=1
+                                
+        ee = np.median(elipse_mediana,0)
+        todas_elipses.append(convierte_tuple2(ee))
+
+    print('\n')    
+    print(todas_elipses)
+
+
+
+
+    ############################################################################
+    # PRINCIPAL -- una vez detectadas:todas_elipses, se buscan en los fotogramas
+    ############################################################################
+
+    elipses_totales = []
+
+    for idx in range(200):
+        
+        PORCENTAJE = 1.8
+        # el porcentaje de solapamiento es menor dado que parto de las elipses
+        
+        cap.set(cv.CAP_PROP_POS_FRAMES, frame+idx)
+        
+        print('vamos por la imagen: ', frame+idx)
+        
+        ret, img = cap.read()
+        
+        if not ret:
+            print('Unable to open' )        
+            # cv.destroyAllWindows()
+            cap.release()
+            video_writer1 and video_writer1.release()
+            video_writer2 and video_writer2.release()   
+            video_writer3 and video_writer3.release()   
+            break
+        else:            
+            src_gray2 = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+            src_gray2 = cv.blur(src_gray2, (blurri,blurri))
+        
+            auxx = thresh_callback(100, src_gray2, img, todas_elipses, video_writer1, video_writer3)         
+            elipses_totales.append(len(auxx)) 
+            
+            if len(auxx)==0:
+                print('lista vacia')
+                vis = cv.cvtColor(src_gray2, cv.COLOR_GRAY2BGR)
+                cv.rectangle(vis, (10, 2), (100,20), (255,255,255), -1)
+                cv.putText(vis, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
+                cv.imshow(source_window, vis)               
+                video_writer2.write(vis) 
+            else:
+                for e in range(len(auxx)):
+                    ellip=auxx[e]
+                    for f in range(len(todas_elipses)):
+                        ellip2 = todas_elipses[f]
+                        if compara_dos_elipses(ellip, ellip2, 1) == True:
+                            color1 = colors[1+f]
+                    # Convert numpy array to tuple
+                    color = (np.int(color1[0]), np.int(color1[1]), np.int(color1[2]))            
+                    # color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256)) 
+                    cv.ellipse(img, ellip, color, 4)
+
+                cv.rectangle(img, (10, 2), (100,20), (255,255,255), -1)
+                cv.putText(img, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
+                cv.imshow(source_window, img)
+                video_writer2.write(img) 
+        
+        
+        keyboard = cv.waitKey(1) & 0xFF
+        if  keyboard == 'q' or keyboard == 27:
+            cap.release()
+            video_writer1 and video_writer1.release()
+            video_writer2 and video_writer2.release()
+            video_writer3 and video_writer3.release()   
+            print('Total de elipses: ', np.sum(elipses_totales))
+            break
+        
+    # cv.destroyAllWindows()
+    cap.release()
+    video_writer1 and video_writer1.release()
+    video_writer2 and video_writer2.release()
+    video_writer3 and video_writer3.release()   
+    print('Total de elipses: ', np.sum(elipses_totales))    
+
+if __name__ == '__main__':
+    main()
     
 
     
