@@ -9,7 +9,6 @@ from keras.callbacks import EarlyStopping
 import numpy as np
 
 
-num_classes = 0 # Number of different actions
 num_tiles = 117**2 # Number of inputs for the neural network
 classes = [] # (id,classname) pairs will be stored here when reading the metadata file
 
@@ -18,10 +17,11 @@ metadata_path = 'D:\Miguel\out_flow_f60_mf50_metadata.txt'
 
 def load_hog():
     print('Loading dataset...')
-    x_train,y_train,x_test,y_test = []
+    x_train,y_train,x_test,y_test = [],[],[],[]
 
     print('Opening metadata file...')
     md_file = open(metadata_path)
+    num_classes = 0
     for line in md_file:
         classes.append((num_classes,line[3:]))
         num_classes = num_classes + 1
@@ -32,10 +32,10 @@ def load_hog():
     data = np.load(data_path)
 
     num_samples = len(data['b'])
-    x_test = data['A'][:num_samples/10][0]
-    x_train = data['A'][num_samples/10:][0]
-    y_test = data['b'][:num_samples/10][0]
-    y_train = data['b'][num_samples/10:][0]
+    x_test = np.squeeze(data['a'][:(num_samples//10+1)])
+    x_train = np.squeeze(data['a'][(num_samples//10+1):])
+    y_test = data['b'][:(num_samples//10+1)]
+    y_train = data['b'][(num_samples//10+1):]
 
     print('Done')
 
