@@ -6,7 +6,7 @@ import keras
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.callbacks import EarlyStopping
-from keras.optimizers import SGD
+from keras.optimizers import RMSprop, Adam, SGD
 import numpy as np
 
 
@@ -78,7 +78,7 @@ model = Sequential()
 model.add(Dense(num_classes, activation='softmax', input_shape=(num_tiles,)))
 
 model.compile(loss='categorical_crossentropy',
-              optimizer=SGD(),
+              optimizer=RMSprop(),
               metrics=['accuracy'])
 
 # Model training
