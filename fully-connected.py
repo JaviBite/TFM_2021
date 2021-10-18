@@ -6,6 +6,7 @@ import keras
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.callbacks import EarlyStopping
+from keras.optimizers import SGD
 import numpy as np
 
 
@@ -48,30 +49,49 @@ def load_hog():
     x_train = x_train[1:]
     print('Done')
 
-    return (x_train,y_train),(x_test,y_test)
+    return (x_train,y_train),(x_test,y_test),num_classes
 
 # load HOG
-(x_train, y_train), (x_test, y_test) = load_hog()
+(x_train, y_train), (x_test, y_test), num_classes = load_hog()
 print(x_train.shape[0], ' train samples')
 print(x_test.shape[0], ' test samples')
 
-# # convert class vectors to binary class matrices
-# y_train = keras.utils.to_categorical(y_train, num_classes)
-# y_test  = keras.utils.to_categorical(y_test,  num_classes)
+# convert class vectors to binary class matrices
+y_train = keras.utils.to_categorical(y_train, num_classes)
+y_test  = keras.utils.to_categorical(y_test,  num_classes)
 
-# # random permutation of training data
-# np.random.seed(0)
-# p = np.arange(x_train.shape[0])
-# np.random.shuffle(p)
-# x_train = x_train[p]
-# y_train = y_train[p]
+# random permutation of training data
+np.random.seed(0)
+p = np.arange(x_train.shape[0])
+np.random.shuffle(p)
+x_train = x_train[p]
+y_train = y_train[p]
 
-# # Stop training when validation error no longer improves
-# earlystop=EarlyStopping(monitor='val_loss', patience=5, 
-#                         verbose=1, mode='auto')
+# Stop training when validation error no longer improves
+earlystop=EarlyStopping(monitor='val_loss', patience=5, 
+                        verbose=1, mode='auto')
 
-# # Model definition
-# model = Sequential()
+# Model definition
+model = Sequential()
 
-# # Single layer perceptron
-# model.add(Dense(num_classes, activation='sigmoid', input_shape=(num_tiles,)))
+# Single layer perceptron
+model.add(Dense(num_classes, activation='softmax', input_shape=(num_tiles,)))
+
+model.compile(loss='categorical_crossentropy',
+              optimizer=SGD(),
+              metrics=['accuracy'])
+
+# Model training
+model.fit(x_train, y_train,
+    batch_size=5,
+    epochs=20,
+    validation_split=0.1,
+    callbacks=[earlystop],
+    verbose=True)
+
+# Model evaluation
+train_score = model.evaluate(x_train, y_train, verbose=0)
+test_score = model.evaluate(x_test, y_test, verbose=0)
+print('%s %2.2f%s' % ('Accuracy train: ', 100*train_score[1], '%' ))
+print('%s %2.2f%s' % ('Accuracy test:  ', 100*test_score[1], '%'))
+
