@@ -217,6 +217,9 @@ def main():
         if final_frame - init_frame < args.frames:
             continue
 
+        if final_frame > frame_count:
+            continue
+
         action_noum = frag['act']
 
         action = action_noum.split(" ")[0]
@@ -327,6 +330,9 @@ def main():
         cv2.destroyAllWindows()
 
         # End framgnet processing
+
+        if len(sequence) != args.frames:
+            continue
 
         #Sequence and action
         class_id = frag['class']

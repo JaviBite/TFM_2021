@@ -91,6 +91,10 @@ def runFrag(frag, args, coco_predictor):
         cap.release()
         return None
 
+    if final_frame > frame_count:
+        cap.release()
+        return None
+
     action_noum = frag['act']
 
     action = action_noum.split(" ")[0]
@@ -341,6 +345,9 @@ def main():
             if ret is not None:
 
                 sequence, class_id = ret
+
+                if len(sequence) != args.frames:
+                    continue
 
                 #Sequence and action
                 y.append(class_id)
