@@ -5,46 +5,21 @@ Created on Mon Feb 24 09:34:36 2020
 @author: cvlab
 """
 import sys
-
 from random import random
+
 from numpy import array
 from numpy import cumsum
 from numpy import array_equal
 import numpy as np
+
 from keras.models import Sequential
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import TimeDistributed
 from keras.layers import Bidirectional
-#
-#X = array([random() for _ in range(10)])
-#y = cumsum(X)
+from keras.callbacks import EarlyStopping
 
-#print(y[0])
-#print(y[len(y)-1])
-
-# create a random hog sequence 
-def get_sequence(n_timesteps,size_elem):
-    # create a sequence of random numbers in [0,1]
-    size = (n_timesteps,) + size_elem
-    X = np.random.random(size)
-    # random classes
-    y = np.random.choice([0, 1], size=1, p=[.2, .8])
-    return X, y
-
-# create multiple samples of random hogs
-def get_sequences(n_sequences, n_timesteps, size_elem):
-    seqX, seqY = list(), list()
-    # create and store sequences
-    for _ in range(n_sequences):
-        X, y = get_sequence(n_timesteps, size_elem)
-        seqX.append(X)
-        seqY.append(y)
-    # reshape input and output for lstm
-    features = size_elem[0]*size_elem[1]*size_elem[2]
-    seqX = array(seqX).reshape(n_sequences, n_timesteps, features)
-    seqY = array(seqY).reshape(n_sequences, 1,)
-    return seqX, seqY
+from matplotlib import pyplot
 
 
 # Load data
@@ -64,6 +39,14 @@ y = np.array(y).reshape((len(labels), num_classes))
 print("X Shape: ", X.shape)
 print("Y Shape: ", y.shape)
 
+val_percent = 0.2
+train_percent = 1 - val_percent
+
+n_train = int(len(labels) * train_percent)
+
+trainX, valX = X[:n_train, :, :], X[n_train:, :, :]
+trainy, valy = y[:n_train, :], y[n_train:, :]
+
 # define problem
 n_timesteps =  X.shape[1]
 n_sequences =  X.shape[0]
@@ -72,13 +55,14 @@ features = X.shape[2]
 print(features)
 # define LSTM
 model = Sequential()
-model.add(Bidirectional(LSTM(100, return_sequences=False), input_shape=(n_timesteps, features)))
-model.add(Dropout(0.2))
-model.add(Flatten())
-model.add(Dense(256, activation="relu"))
+model.add(Dropout(0.5, input_shape=(n_timesteps, features)))
+model.add(Bidirectional(LSTM(50, return_sequences=False, activation='relu')))
+model.add(Dropout(0.5))
+#model.add(Flatten())
+model.add(Dense(50, activation="relu"))
 model.add(Dropout(0.3))
-model.add(Dense(num_classes, activation = "softmax"))
-model.compile(loss= 'binary_crossentropy' , optimizer= 'adam' , metrics=[ 'acc' ])
+model.add(Dense(num_classes, activation = "relu"))
+model.compile(loss= 'mse' , optimizer= 'adam' , metrics=[ 'acc' ])
 print(model.summary())
 
 # train LSTM
@@ -92,11 +76,15 @@ for i in range(2):
     count = np.sum(labels == i)
     print("Class ",i,":", count)
 
-model.fit(X, y, epochs=10, batch_size=10)
+# Early Estopping
+es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=5)
+history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=5, batch_size=10, callbacks=[es])
+
+model.save('out_model.h5')
 
 # evaluate LSTM
 #X, y = get_sequences(100, n_timesteps, size_elem)
-loss, acc = model.evaluate(X, y, verbose=0)
+loss, acc = model.evaluate(valX, valy, verbose=0)
 print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
 
 # make predictions
@@ -112,3 +100,20 @@ yhat=np.round(predict_x,decimals=0)
 
 exp, pred = y[0:10], yhat
 print( 'y=%s, yhat=%s, correct=%s '% (exp, pred, array_equal(exp,pred)))
+
+fig, axs = pyplot.subplots(2, 1, constrained_layout=True)
+axs[0].set_title('Loss')
+axs[0].plot(history.history['loss'], label='train')
+axs[0].plot(history.history['val_loss'], label='test')
+axs[0].legend()
+axs[0].set_xlabel('Epoch')
+axs[0].set_ylabel('Loss')
+
+axs[1].set_xlabel('Epoch')
+axs[1].plot(history.history['acc'], label='train')
+axs[1].plot(history.history['val_acc'], label='test')
+axs[1].legend()
+axs[1].set_title('Accuracy')
+axs[1].set_ylabel('Accuracy')
+
+pyplot.show()
