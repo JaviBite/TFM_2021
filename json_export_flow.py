@@ -84,20 +84,22 @@ def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow):
 
             averages = []
             for pot in pots:
-                c, _, _ = pot
+                c, axes, _ = pot
 
-                areax = [slice(int(c[1]-5),int(c[1]+5)), 
-                         slice(int(c[0]-5),int(c[0]+5)), 0]
-                areay = [slice(int(c[1]-5),int(c[1]+5)), 
-                         slice(int(c[0]-5),int(c[0]+5)), 1]
+                area = int((axes[0]+axes[1]) / 3)
+
+                areax = [slice(int(c[1]-area),int(c[1]+area)), 
+                         slice(int(c[0]-area),int(c[0]+area)), 0]
+                areay = [slice(int(c[1]-area),int(c[1]+area)), 
+                         slice(int(c[0]-area),int(c[0]+area)), 1]
                 
                 fx, fy = flow[tuple(areax)], flow[tuple(areay)] 
                 v = np.sqrt(fx * fx + fy * fy)
 
-                averages.append(np.average(v))
+                averages.append(np.average(v[np.nonzero(v)]))
 
             #print(averages)
-            most_flow_index = np.argmax(averages)
+            most_flow_index = np.nanargmax(averages)
             #print(most_flow_index)
             
         bbox, _ = encuentra_box(pots[most_flow_index])
@@ -287,13 +289,6 @@ def main():
         if (cap.isOpened()== False): 
             print("Error opening video  file")
             continue
-        
-        # Read until video is completed
-        frame_i = init_frame
-        final_frame = frame_i + args.frames
-
-        # Corners for ROI
-        roix1, roix2, roiy1, roiy2 = 0,0,0,0
 
         roi_window = None
 
@@ -312,9 +307,64 @@ def main():
         flowFB = cv2.calcOpticalFlowFarneback(frameflow1, frameflow2, 
                                 None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
+        #Get first frame with considerable optical flow
+
+        not_flow = True
+        frame_i = init_frame
+
+        acc_flow = None
+        FRAMES_TO_SEARCH = 100
+        for fi in range(FRAMES_TO_SEARCH):
+            ret, frameflow1 = cap.read()
+            ret, frameflow2 = cap.read()
+
+            frameflow1 = cv2.cvtColor(frameflow1, cv2.COLOR_BGR2GRAY)
+            frameflow2 = cv2.cvtColor(frameflow2, cv2.COLOR_BGR2GRAY)
+
+            flowFB = cv2.calcOpticalFlowFarneback(frameflow1, frameflow2, 
+                                    None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
+            #Acc flow
+            if fi == 0:
+                acc_flow = flowFB
+            else:
+                acc_flow += flowFB
+
+            # Average flow
+
+            fx, fy = flowFB[:,0], flowFB[:,1] 
+            v = np.sqrt(fx * fx + fy * fy)
+            average = np.average(v[np.nonzero(v)])
+
+            #print("average flow:", average)
+
+            #cv2.imshow("FRAMES",frameflow1)
+            #cv2.waitKey(20)
+
+            if average > 0.01 and not_flow:
+                not_flow = False
+                init_frame = frame_i - 2
+                break
+                
+
+            frame_i = frame_i + 2
+
+        if not_flow:
+            continue
+        
+        #init_frame = frame_i - 2
+        frame_i = init_frame
+        final_frame = frame_i + args.frames
+
+        if final_frame - init_frame < args.frames:
+            continue
+
+        if final_frame > frame_count:
+            continue
+
         # Get roi
         n_search_frames = 5
-        roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, flowFB)
+        roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow)
         if roi is not None:
             x1, y1, x2, y2 = roi
             roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
@@ -325,7 +375,8 @@ def main():
         
         sequence = []
         cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
-        last_gray_frames[1] = frameflow1
+        last_gray_frames[1] = frameflow2
+        bad_hog = 0
         while(cap.isOpened()):
             # Capture frame-by-frame
             ret, frame = cap.read()
@@ -366,6 +417,16 @@ def main():
                         hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
                         cv2.imshow('hog', hog_image)
                         normalized_blocks = normalized_blocks[0]
+
+                    fx, fy = roi_flow[:,0], roi_flow[:,1] 
+                    v = np.sqrt(fx * fx + fy * fy)
+                    avg_hog = np.average(v[np.nonzero(v)])
+                    #print("Average flow_roi:", avg_hog)
+                    if avg_hog <= 0.3:
+                        bad_hog = bad_hog + 1
+                        if bad_hog > 5:
+                            print("No flow, skipping")
+                            break
 
                     #Add hog features to sequence
                     sequence.append(normalized_blocks)
