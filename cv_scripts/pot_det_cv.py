@@ -43,8 +43,8 @@ from skimage.measure import label, regionprops, regionprops_table
     
 from scipy.spatial import distance
    
-from libs.skeletonize import skeletonize
-from libs.crossing_number import calculate_minutiaes
+from cv_scripts.libs.skeletonize import skeletonize
+from cv_scripts.libs.crossing_number import calculate_minutiaes
 
 rng.seed(12345)
 STEP = 4
@@ -253,8 +253,8 @@ def thresh_callback(threshold, src_gray, img, todas_elipses, video_writer1, vide
     contornos_unidos = []
     
     if len(todas_elipses)==0:      
-        print('\n')
-        print('m_iou')
+        #print('\n')
+        #print('m_iou')
         ## obtener matriz de intersecion vs union 21-09-21 
         contours_finales, contornos_finales, polys, elipses = detectar_elipses(src_gray, contours, ratio, thh, tamano)
         m_iou = interseccion_vs_union(elipses)        
@@ -294,7 +294,7 @@ def thresh_callback(threshold, src_gray, img, todas_elipses, video_writer1, vide
         cv.drawContours(contornos_u, np.array([c]), 0, QUIVER, 3)
         
 
-    cv.imshow("contornos_unidos", contornos_u)     
+    #cv.imshow("contornos_unidos", contornos_u)     
     if video_writer3:   
         video_writer3.write(contornos_u)          
     
@@ -320,7 +320,7 @@ def detectar_elipses(src_gray, contours, ratio, thh, tamano):
     n_box = 0   
  
 
-    print('len(contours) = ', len(contours))  
+    #print('len(contours) = ', len(contours))  
     
     for i, c in enumerate(contours):
         color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
@@ -402,8 +402,9 @@ def detectar_elipses(src_gray, contours, ratio, thh, tamano):
                         
                         
                 
-                if len(poly) == 0:     
-                    print('vacia')
+                if len(poly) == 0:  
+                    pass
+                    #print('vacia')
                 elif  ellip[1][0]<ratio*ellip[1][1] and ellip[1][1]<ratio*ellip[1][0] and  cc2.shape[0] > 100:
     
                     # cc2, poly, ellip, recortar = evalua_elipse(cc2, 5, ratio, color, 1)      
@@ -437,13 +438,14 @@ def detectar_elipses(src_gray, contours, ratio, thh, tamano):
                     # fig, ax = plt.subplots(1, figsize=(12,8))
                     # plt.imshow(image)
                 else:
-                    print('no tiene forma eliptica')
+                    pass
+                    #print('no tiene forma eliptica')
 
     
-    cv.imshow("fuegos", fuegos)               
-    cv.imshow("elipses", drawing)   
+    #cv.imshow("fuegos", fuegos)               
+    #cv.imshow("elipses", drawing)   
 
-    print("Numero elipses inicial = ", len(contours_finales))     
+    #print("Numero elipses inicial = ", len(contours_finales))     
     
     return contours_finales, contornos_finales, polys, elipses 
 
@@ -513,7 +515,7 @@ def elipses_finales(canny_output, contornos_unidos, contours_finales, ratio, vid
                 color1 = colors[conta]
                 # Convert numpy array to tuple
                 # color = tuple(color1.reshape(1, -1)[0])
-                color = (np.int(color1[0]), np.int(color1[1]), np.int(color1[2]))
+                color = (int(color1[0]), int(color1[1]), int(color1[2]))
                 # color0 = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
                 
                 ellipse = cv.fitEllipse(cc0)    
@@ -536,24 +538,24 @@ def elipses_finales(canny_output, contornos_unidos, contours_finales, ratio, vid
                         
                         # color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))     
                         # cv.ellipse(vis, ellipse, color, 4)     
-                        cv.ellipse(canny_output3, ellipse, color, 4)    
+                        #cv.ellipse(canny_output3, ellipse, color, 4)    
                         # if len(todas_elipses)==0:
                         elipses_aux.append(ellipse)                                                
                        
-                    else:
+                    #else:
                         # cv.ellipse(canny_output2, ellipse, color, 4)
-                        cv.drawContours(canny_output2, [box], 0, color, 4)
-                        cv.ellipse(canny_output2, ellipse, (255,0,255), 4)
-                        cv.drawContours(canny_output2, [cc0], 0, (0,255,255), 3)
+                        #cv.drawContours(canny_output2, [box], 0, color, 4)
+                        #cv.ellipse(canny_output2, ellipse, (255,0,255), 4)
+                        #cv.drawContours(canny_output2, [cc0], 0, (0,255,255), 3)
                         # print(cc0.shape[0])
-                else:
+                #else:
                     # cv.ellipse(canny_output2, ellipse, color, 4)     
-                    cv.drawContours(canny_output2, [box], 0, color)
-                    cv.drawContours(canny_output2, [cc0], 0, (0,255,255))
+                    #cv.drawContours(canny_output2, [box], 0, color)
+                    #cv.drawContours(canny_output2, [cc0], 0, (0,255,255))
                     # cv.ellipse(canny_output2, ellipse, color, 2)
                 
-    cv.imshow("canny_output2", canny_output2) 
-    cv.imshow("canny_output3", canny_output3) 
+    #cv.imshow("canny_output2", canny_output2) 
+    #cv.imshow("canny_output3", canny_output3) 
 
     if video_writer1:   
         video_writer1.write(canny_output3)
@@ -580,7 +582,7 @@ def minucias(contornos, nume):
     # plt.show()  
 
     canny_output2 = 255*contornos_gruesos
-    cv.imshow("canny_output2", canny_output2)       
+    #cv.imshow("canny_output2", canny_output2)       
     
     
     # from skimage.morphology import skeletonize as skelt
@@ -817,7 +819,7 @@ def evalua_elipse2(imagen, cc2, thh, ratio, color, ver):
             ll = len(cc2)# c.shape[0]
             #cc = np.zeros((2, 1), dtype=np.uint8)
             negativos = -np.ones((ll, 1), dtype=np.float32)
-            signo = np.zeros((ll, 1), dtype=np.float)
+            signo = np.zeros((ll, 1), dtype=float)
             for jj in range(ll):
                 #cc = c[jj]                       
                 px = cc2[jj][0]
@@ -949,17 +951,17 @@ def evalua_elipse2(imagen, cc2, thh, ratio, color, ver):
 def  interseccion_vs_union(elipses):                       
     matriz=np.zeros((len(elipses),len(elipses)), dtype=np.float32)
     for ll in range(len(elipses)):      
-        ellip=np.array(elipses[ll])
+        ellip=np.array(elipses[ll], dtype=object)
         boxx1, boxxi = encuentra_box(ellip)                                                   
         for ll2 in range(len(elipses)):   
-            ellip=np.array(elipses[ll2])              
+            ellip=np.array(elipses[ll2], dtype=object)              
             boxx2, boxxi = encuentra_box(ellip)                                                   
             """
             Computes IUO between two bboxes in the form [x1,y1,x2,y2]
             """
             matriz[ll,ll2]=iou(boxx1,boxx2)
             
-    print(np.around(matriz,2))    
+    #print(np.around(matriz,2))    
     
     return matriz
 
@@ -987,9 +989,9 @@ def hausdorff(m_iou, contornos_finales, polys, thh):
             maximo = np.amax(dd)            
             tabla_maximos[ll,ll2]=maximo
 
-    print('\n')     
-    print('hausdorff') 
-    print(np.around(tabla_maximos,1))
+    #print('\n')     
+    #print('hausdorff') 
+    #print(np.around(tabla_maximos,1))
     
     hausdorf=np.zeros((len(polys),len(polys)), dtype=np.float32)
     for ll in range(len(polys)): 
@@ -999,8 +1001,8 @@ def hausdorff(m_iou, contornos_finales, polys, thh):
             else:
                 hausdorf[ll, ll2] = tabla_maximos[ll2,ll] 
 
-    print('\n')
-    print(np.around(hausdorf,1))
+    #print('\n')
+    #print(np.around(hausdorf,1))
 
     
 
@@ -1009,9 +1011,9 @@ def hausdorff(m_iou, contornos_finales, polys, thh):
     zz=100*np.add(m_iou, 0.1)
     hausdorf2 = np.divide(hausdorf,zz)
         
-    print('\n')
-    print('Multiplicar por 100')
-    print(np.around(hausdorf2,1))   
+    #print('\n')
+    #print('Multiplicar por 100')
+    #print(np.around(hausdorf2,1))   
     
     hausdorf2 *= 100
     
@@ -1026,8 +1028,8 @@ def hausdorff(m_iou, contornos_finales, polys, thh):
         for kk in range(len(aux)):            
             contornos_unidos[ll, aux[kk]] = 1
 
-    print('\n')
-    print(contornos_unidos)
+    #print('\n')
+    #print(contornos_unidos)
     
     
     conta = 1
@@ -1056,7 +1058,7 @@ def hausdorff(m_iou, contornos_finales, polys, thh):
     #             contornos_unidos[aux] = ll
     #             indices[aux]=0
     
-    print(contornos_fin)
+    #print(contornos_fin)
        
     return contornos_fin
     
@@ -1089,7 +1091,7 @@ def reordenar(con):
     elif len(repes)==0:    
         cc = aux
     else:    
-        print('No se como cortar esta curva',len(repes) )    
+        #print('No se como cortar esta curva',len(repes) )    
         # image2 = cv.cvtColor(src_gray, cv.COLOR_GRAY2BGR)# cv.cvtColor(img ,cv.COLOR_BGR2RGB)
         # cv.drawContours(image2, [cc], 0, (255,255,0), thickness = 4)
         # fig, ax = plt.subplots(1, figsize=(12,8))
@@ -1138,7 +1140,113 @@ def convierte_tuple2(ee):
     return tuple(aaa)
 
 
+def detect_pots_cv(cap, init_frame, search_frames, blurri):
 
+    todas_elipses = []
+    elipses_totales = []
+    num_elipses_totales = []
+
+    idx = 0
+    for idx in range(search_frames):         
+        cap.set(cv.CAP_PROP_POS_FRAMES, init_frame+idx)    
+        #print('vamos por la imagen: ', init_frame+idx) 
+        
+        ret, img = cap.read()    
+        if not ret:
+            print('Unable to open' )        
+            # cv.destroyAllWindows()
+            cap.release()
+            break
+        else:            
+            src_gray2 = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+            src_gray2 = cv.blur(src_gray2, (blurri,blurri))
+            # subrutina principal
+            auxx = thresh_callback(100, src_gray2, img, todas_elipses, None, [])         
+            elipses_totales.append(auxx) 
+            num_elipses_totales.append(len(auxx))        
+            #if len(auxx)==0:
+                #print('lista vacia')
+                #vis = cv.cvtColor(src_gray2, cv.COLOR_GRAY2BGR)
+                #cv.rectangle(vis, (10, 2), (100,20), (255,255,255), -1)
+                #cv.putText(vis, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
+                #cv.imshow(source_window, vis)               
+            #else:
+                #for e in range(len(auxx)):
+                    #ellip=auxx[e]
+                    #color1 = colors[1+e]
+                    # Convert numpy array to tuple
+                    #color = (np.int(color1[0]), np.int(color1[1]), np.int(color1[2]))            
+                    #cv.ellipse(img, ellip, color, 4)
+
+                #cv.rectangle(img, (10, 2), (100,20), (255,255,255), -1)
+                #cv.putText(img, str(cap.get(cv.CAP_PROP_POS_FRAMES)), (15, 15),cv.FONT_HERSHEY_SIMPLEX, 0.5 , (0,0,0))
+                #cv.imshow(source_window, img)
+    
+    # INICIO -- Encontramos esas elipses  # 13-10-21
+
+    num_elips = np.max(num_elipses_totales)
+    inicio = 0
+    for i in range(len(elipses_totales)):
+        if num_elipses_totales[i] == num_elips:
+            break
+        else:
+            inicio = inicio+1
+            
+    # reordeno para q la primera tenga todas las elipses encontradas
+    if inicio > 0: # reordeno
+        new_elipses_totales = []
+        for i in range(inicio, len(elipses_totales)):
+            new_elipses_totales.append(elipses_totales[i])
+        for i in range(inicio):
+            new_elipses_totales.append(elipses_totales[i])
+    else:
+        new_elipses_totales = elipses_totales
+        
+    # comparo el resto con la primera
+    compara = np.zeros((len(elipses_totales), num_elips),  dtype=np.int32)  
+    cuantas_iguales = np.ones(num_elips,  dtype=np.int32)   
+    for i in range(len(new_elipses_totales[0])): # max = num_elips
+        ellip1 = new_elipses_totales[0][i]
+        compara[0][i] = 1+i # consigo misma
+        for j in range(1, len(elipses_totales)):
+            for k in range(len(new_elipses_totales[j])):
+                ellip2 = new_elipses_totales[j][k]
+                if compara_dos_elipses(ellip1, ellip2, 1) == True:
+                    compara[j][k] = 1+i
+                    cuantas_iguales[i] +=1
+                    
+    #print(compara)                
+            
+    todas_elipses = [] 
+    #print(new_elipses_totales[0])
+    for i in range(num_elips): # max = num_elips
+        elipse_mediana = np.zeros((cuantas_iguales[i], 5),  dtype=np.int32) 
+        idx=0
+        for j in range(len(elipses_totales)):
+            for k in range(num_elips):
+                if compara[j][k] == 1+i:
+                    aux = k 
+                    ellipse = new_elipses_totales[j][aux]
+                    elipse_mediana[idx][0]  = ellipse[0][0]
+                    elipse_mediana[idx][1]  = ellipse[0][1]
+                    elipse_mediana[idx][2]  = ellipse[1][0]
+                    elipse_mediana[idx][3]  = ellipse[1][1]
+                    elipse_mediana[idx][4]  = ellipse[2]
+                    idx +=1
+                                
+        ee = np.median(elipse_mediana,0)
+        todas_elipses.append(convierte_tuple2(ee))
+
+    #print('\n')    
+    #print(todas_elipses)
+
+    for ellip in todas_elipses:
+        cv.ellipse(img, ellip, (0,0,255), 4)
+    
+    #cv.imshow("LAS ELIPSES FINALES", img)
+    #cv.waitKey(0)
+
+    return todas_elipses        
 
 
 def main():
@@ -1239,8 +1347,8 @@ def main():
     video_writer2 = None
     video_writer3 = None
 
-    source_window = 'Source'
-    cv.namedWindow(source_window, cv.WINDOW_AUTOSIZE)
+    #source_window = 'Source'
+    #cv.namedWindow(source_window, cv.WINDOW_AUTOSIZE)
 
 
     blurri = 5
@@ -1251,6 +1359,10 @@ def main():
     num_elipses_totales = []
 
     colors = np.int8( list(np.ndindex(2, 2, 2)) ) * 255
+
+
+    print(detect_pots_cv(cap,frame,10,blurri))
+    exit()
 
 
 
