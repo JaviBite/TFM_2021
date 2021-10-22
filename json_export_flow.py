@@ -178,7 +178,7 @@ def main():
     f1.close()
 
     if args.videos_folder == "none":
-        localpath = data1['config']['file']['loc_prefix']['1'][7:]
+        localpath = data1['config']['file']['loc_prefix']['1'][8:]
     else:
         localpath = args.videos_folder
     
