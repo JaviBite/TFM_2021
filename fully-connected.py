@@ -13,13 +13,14 @@ import numpy as np
 num_tiles = 117**2 # Number of inputs for the neural network
 classes = [] # (id,classname) pairs will be stored here when reading the metadata file
 
-data_path = 'D:\Miguel\out_flow_f60_mf50.npz'
-metadata_path = 'D:\Miguel\out_flow_f60_mf50_metadata.txt'
+path = 'D:\\GI Lab\\'
+data_path = path+'out_flow_f60_mf50.npz'
+metadata_path = path+'out_flow_f60_mf50_metadata.txt'
 
 def load_hog():
     print('Loading dataset...')
     x_train = x_test = np.array([[0]*num_tiles])
-    y_train = y_test = ([])
+    y_train = y_test = np.array([])
 
     print('Opening metadata file...')
     md_file = open(metadata_path)
@@ -41,9 +42,9 @@ def load_hog():
         y = y[y==i]
         num_samples = len(y)
         x_test = np.append(x_test,x[:(num_samples//10+1)],axis=0)
-        y_test.append(y[:(num_samples//10+1)])
+        y_test = np.append(y_test,y[:(num_samples//10+1)])
         x_train = np.append(x_train,x[(num_samples//10+1):],axis=0)
-        y_train.append(y[(num_samples//10+1):])
+        y_train = np.append(y_train,y[(num_samples//10+1):])
 
     x_test = x_test[1:]
     x_train = x_train[1:]
@@ -53,9 +54,11 @@ def load_hog():
 
 # load HOG
 (x_train, y_train), (x_test, y_test), num_classes = load_hog()
-print(x_train.shape[0], ' train samples')
-print(x_test.shape[0], ' test samples')
+print(x_train.shape, ' train samples')
+print(x_test.shape, ' test samples')
 
+print(y_train.shape)
+print(y_test.shape)
 # convert class vectors to binary class matrices
 y_train = keras.utils.to_categorical(y_train, num_classes)
 y_test  = keras.utils.to_categorical(y_test,  num_classes)
@@ -87,7 +90,7 @@ model.fit(x_train, y_train,
     epochs=20,
     validation_split=0.1,
     callbacks=[earlystop],
-    verbose=True)
+    verbose=False)
 
 # Model evaluation
 train_score = model.evaluate(x_train, y_train, verbose=0)
