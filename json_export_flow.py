@@ -148,6 +148,8 @@ def main():
     parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
     parser.add_argument('-f',"--frames", type=int, default=FRAMES_PER_SEQ, help="Frames per sequence")
     parser.add_argument('-acc',"--flow_accomulate", type=int, default=FLOW_ACC, help="Flows to acommulate before HOG processing")
+    parser.add_argument('-aug',"--augmentation", action="store_true", help="Add data augmentation flipping the frames")
+
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -158,6 +160,7 @@ def main():
     VIS = args.visualize
 
     FLOW_ACC = args.flow_accomulate
+    DATA_AUGMENTATION = args.augmentation
     
     file1 = args.json_dir
 
@@ -295,6 +298,7 @@ def main():
 
         flow_count = 0
         last_gray_frames = [None, None]
+        last_gray_frames_flip = [None, None]
 
         #Get first frame with considerable optical flow
 
@@ -364,12 +368,15 @@ def main():
 
         
         sequence = []
+        sequence_aug = []
         cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
         last_gray_frames[1] = cv2.resize(frameflow1[tuple(roi_window)],(args.dimension,args.dimension))
+        last_gray_frames_flip[1] = cv2.resize(cv2.flip(frameflow1[tuple(roi_window)],1),(args.dimension,args.dimension))
         bad_hog = 0
         while(cap.isOpened()):
             # Capture frame-by-frame
             ret, frame = cap.read()
+
             if frame_i <= final_frame and ret == True: 
                 
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -378,9 +385,16 @@ def main():
                 # Update Last Frames
                 last_gray_frames[0] = last_gray_frames[1]
                 last_gray_frames[1] = roi_frame
-
+            
                 #Calcular flujo optico
                 flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
+                                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
+                if DATA_AUGMENTATION:
+                    roi_flip_frame = cv2.flip(roi_frame, 1)
+                    last_gray_frames_flip[0] = last_gray_frames_flip[1]
+                    last_gray_frames_flip[1] = roi_flip_frame
+                    flowFB_flip = cv2.calcOpticalFlowFarneback(last_gray_frames_flip[0], last_gray_frames_flip[1], 
                                 None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
                 # Visualization
@@ -395,8 +409,13 @@ def main():
                     
                 if flow_count == 0:
                     flow = CTTE * flowFB
+                    if DATA_AUGMENTATION:
+                        flow_flip = CTTE * flowFB_flip
+
                 else:
                     flow += CTTE * flowFB
+                    if DATA_AUGMENTATION:
+                        flow_flip += CTTE * flowFB_flip
                 
                 flow_count = flow_count + 1
                         
@@ -430,6 +449,13 @@ def main():
                     #print("Len Hog: ",len(normalized_blocks))
                     sequence.append(normalized_blocks)  
 
+                    if DATA_AUGMENTATION:
+                        roi_flow = flow_flip
+                        modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+                        normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+                                                                cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+                        sequence_aug.append(normalized_blocks)  
+
                 frame_i =  frame_i + 1
             
             # Break the loop
@@ -448,6 +474,11 @@ def main():
         class_id = frag['class']
         y.append(class_id)
         X.append(np.array(sequence))
+
+        if DATA_AUGMENTATION:
+            y.append(class_id)
+            X.append(np.array(sequence_aug))
+
         #print("Len X: ", len(X))
 
         cap.release()
