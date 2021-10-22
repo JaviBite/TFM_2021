@@ -488,7 +488,7 @@ def elipses_finales(canny_output, contornos_unidos, contours_finales, ratio, vid
     elipses_aux = []
     indices = np.ones(len(contornos_unidos), dtype=np.uint8)
 
-    colors = np.int8( list(np.ndindex(2, 2, 2)) ) * 255
+    #colors = np.int8( list(np.ndindex(2, 2, 2)) ) * 255
      
     # vis = cv.cvtColor(src_gray, cv.COLOR_GRAY2BGR)
 
@@ -512,10 +512,10 @@ def elipses_finales(canny_output, contornos_unidos, contours_finales, ratio, vid
                 # cv.drawContours(canny_output2, contornos_unidos, ll, color)                
 
             if len(cc0)>5: #There should be at least 5 points to fit the ellipse in function
-                color1 = colors[conta]
+                #color1 = colors[conta % len(colors)]
                 # Convert numpy array to tuple
                 # color = tuple(color1.reshape(1, -1)[0])
-                color = (int(color1[0]), int(color1[1]), int(color1[2]))
+                #color = (int(color1[0]), int(color1[1]), int(color1[2]))
                 # color0 = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
                 
                 ellipse = cv.fitEllipse(cc0)    
