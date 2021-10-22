@@ -72,7 +72,12 @@ def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow, VIS)
 
     blurri = 5
 
-    pots = detect_pots_cv(cap, init_frame, n_search_frames, blurri, VIS)
+    try:
+        pots = detect_pots_cv(cap, init_frame, n_search_frames, blurri, VIS)
+    except OverflowError as of:
+        print("After the Overflow error", of, "skipping")
+        pots = []
+
     cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
 
     if len(pots) > 0:
