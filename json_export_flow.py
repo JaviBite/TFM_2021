@@ -1,7 +1,6 @@
 
 import json
-import sys, os
-import codecs, unicodedata
+from scipy import sparse
 import re, random
 import cv2
 import numpy as np
@@ -69,11 +68,11 @@ def getROI(frame, coco_pred, padding, width, height, flow):
 # Return the region of interest top-left and bottom-right corners
 # Call only with the first frame of each fragment, then use cropROI with the returned values.
 # Format: (X0, Y0, w, h)
-def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow):
+def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow, VIS):
 
     blurri = 5
 
-    pots = detect_pots_cv(cap, init_frame, n_search_frames, blurri)
+    pots = detect_pots_cv(cap, init_frame, n_search_frames, blurri, VIS)
     cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
 
     if len(pots) > 0:
@@ -297,16 +296,6 @@ def main():
         flow_count = 0
         last_gray_frames = [None, None]
 
-        # First frames for flow
-        ret, frameflow1 = cap.read()
-        ret, frameflow2 = cap.read()
-
-        frameflow1 = cv2.cvtColor(frameflow1, cv2.COLOR_BGR2GRAY)
-        frameflow2 = cv2.cvtColor(frameflow2, cv2.COLOR_BGR2GRAY)
-
-        flowFB = cv2.calcOpticalFlowFarneback(frameflow1, frameflow2, 
-                                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
-
         #Get first frame with considerable optical flow
 
         not_flow = True
@@ -343,7 +332,7 @@ def main():
 
             if average > 0.01 and not_flow:
                 not_flow = False
-                init_frame = frame_i - 2
+                init_frame = frame_i - 1
                 break
                 
 
@@ -353,8 +342,7 @@ def main():
             continue
         
         #init_frame = frame_i - 2
-        frame_i = init_frame
-        final_frame = frame_i + args.frames
+        final_frame = init_frame + args.frames
 
         if final_frame - init_frame < args.frames:
             continue
@@ -362,9 +350,11 @@ def main():
         if final_frame > frame_count:
             continue
 
+        
+
         # Get roi
         n_search_frames = 5
-        roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow)
+        roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
         if roi is not None:
             x1, y1, x2, y2 = roi
             roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
@@ -375,37 +365,45 @@ def main():
         
         sequence = []
         cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
-        last_gray_frames[1] = frameflow2
+        last_gray_frames[1] = cv2.resize(frameflow1[tuple(roi_window)],(args.dimension,args.dimension))
         bad_hog = 0
         while(cap.isOpened()):
             # Capture frame-by-frame
             ret, frame = cap.read()
             if frame_i <= final_frame and ret == True: 
+                
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(args.dimension,args.dimension))
 
                 # Update Last Frames
                 last_gray_frames[0] = last_gray_frames[1]
-                last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                last_gray_frames[1] = roi_frame
 
                 #Calcular flujo optico
                 flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
                                 None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
-
-                img_roi = frame[tuple(roi_window)]
-                img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
-
                 # Visualization
                 if VIS:
+                    img_roi = frame[tuple(roi_window)]
+                    img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
                     cv2.imshow("ROI", img_roi)
+                    cv2.imshow("Image", frame)
                     cv2.waitKey(100)
-                    visualiced = True
 
                 #Acomular y hacer histograma
+                    
+                if flow_count == 0:
+                    flow = CTTE * flowFB
+                else:
+                    flow += CTTE * flowFB
+                
+                flow_count = flow_count + 1
+                        
                 if flow_count >= FLOW_ACC:
                     flow_count = 0
 
-                    roi_flow = flow[tuple(roi_window)]
-                    roi_flow = cv2.resize(roi_flow,(args.dimension,args.dimension))
+                    roi_flow = flow
                     modulo, argumento, argumento2 = mi_gradiente(roi_flow)
                     normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
                                                             cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
@@ -420,24 +418,17 @@ def main():
 
                     fx, fy = roi_flow[:,0], roi_flow[:,1] 
                     v = np.sqrt(fx * fx + fy * fy)
-                    avg_hog = np.average(v[np.nonzero(v)])
-                    #print("Average flow_roi:", avg_hog)
-                    if avg_hog <= 0.3:
+                    count_flow = np.count_nonzero(v[v >0.5])/(v.shape[0]*v.shape[1])
+                    #print("Count flow_roi: ", count_flow)
+                    if count_flow <= 0.2:
                         bad_hog = bad_hog + 1
                         if bad_hog > 5:
                             print("No flow, skipping")
                             break
 
                     #Add hog features to sequence
-                    sequence.append(normalized_blocks)
-                
-                else:
-                    flow_count = flow_count + 1
-                    
-                    if flow_count == 1:
-                        flow = CTTE * flowFB
-                    else:
-                        flow += CTTE * flowFB
+                    #print("Len Hog: ",len(normalized_blocks))
+                    sequence.append(normalized_blocks)  
 
                 frame_i =  frame_i + 1
             
@@ -449,14 +440,16 @@ def main():
 
         # End framgnet processing
 
-        if len(sequence) != int(args.frames/(FLOW_ACC+1)):
+        if len(sequence) != int(args.frames/FLOW_ACC):
             continue
-
+        
+        #print("len seq: ", len(sequence))
         #Sequence and action
         class_id = frag['class']
         y.append(class_id)
         X.append(np.array(sequence))
-        
+        #print("Len X: ", len(X))
+
         cap.release()
         frag_count = frag_count + 1
         t.update()
@@ -469,7 +462,11 @@ def main():
     #X = X.reshape(total_fragments, 9*16*16*3*3, 1)
 
     y = np.array(y)
+
     X = np.array(X)
+
+    print(X.shape)
+    print(y.shape)
 
     np.savez(out_file + ".npz", a=X, b=y)
 

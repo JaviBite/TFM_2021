@@ -1140,7 +1140,7 @@ def convierte_tuple2(ee):
     return tuple(aaa)
 
 
-def detect_pots_cv(cap, init_frame, search_frames, blurri):
+def detect_pots_cv(cap, init_frame, search_frames, blurri, VIS=False):
 
     todas_elipses = []
     elipses_totales = []
@@ -1243,7 +1243,8 @@ def detect_pots_cv(cap, init_frame, search_frames, blurri):
     for ellip in todas_elipses:
         cv.ellipse(img, ellip, (0,0,255), 4)
     
-    #cv.imshow("LAS ELIPSES FINALES", img)
+    if VIS:
+        cv.imshow("LAS ELIPSES FINALES", img)
     #cv.waitKey(0)
 
     return todas_elipses        

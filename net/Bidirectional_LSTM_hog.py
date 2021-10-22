@@ -78,7 +78,7 @@ for i in range(2):
 
 # Early Estopping
 es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=5)
-history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=5, batch_size=10, callbacks=[es])
+history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=50, batch_size=10, callbacks=[es])
 
 model.save('out_model.h5')
 
