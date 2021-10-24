@@ -103,7 +103,11 @@ def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow, VIS)
                 averages.append(np.average(v[np.nonzero(v)]))
 
             #print(averages)
-            most_flow_index = np.nanargmax(averages)
+            try:
+                most_flow_index = np.nanargmax(averages)
+            except ValueError as e:
+                print("Value error")
+                return None
             #print(most_flow_index)
             
         bbox, _ = encuentra_box(pots[most_flow_index])
