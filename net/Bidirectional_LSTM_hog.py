@@ -22,6 +22,7 @@ from keras.layers import TimeDistributed
 from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import SGD, Adam, get
+from tqdm import tqdm
 
 from matplotlib import pyplot
 
@@ -94,6 +95,7 @@ def main():
     models_metrics = []
 
     # Run the combinations
+    t = tqdm(total=NUM_EXP)
     for i in range(NUM_EXP):
 
         model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
@@ -127,6 +129,8 @@ def main():
         to_append = {'model': model, 'history': metrics}
 
         models_metrics.append(to_append)
+
+        t.update()
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
