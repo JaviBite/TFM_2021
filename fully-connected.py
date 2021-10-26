@@ -14,8 +14,8 @@ num_tiles = 117**2 # Number of inputs for the neural network
 classes = [] # (id,classname) pairs will be stored here when reading the metadata file
 
 path = 'D:\\GI Lab\\'
-data_path = path+'out_flow_f60_mf50.npz'
-metadata_path = path+'out_flow_f60_mf50_metadata.txt'
+data_path = path+'out_test_aug_500_1_p10.npz'
+metadata_path = path+'out_test_aug_500_1_p10_metadata.txt'
 
 def load_hog():
     print('Loading dataset...')
@@ -41,10 +41,14 @@ def load_hog():
         x = x[y==i]
         y = y[y==i]
         num_samples = len(y)
-        x_test = np.append(x_test,x[:(num_samples//10+1)],axis=0)
-        y_test = np.append(y_test,y[:(num_samples//10+1)])
-        x_train = np.append(x_train,x[(num_samples//10+1):],axis=0)
-        y_train = np.append(y_train,y[(num_samples//10+1):])
+        test_samples = num_samples//10+1
+        train_samples = num_samples-test_samples
+        print('Class: ',i)
+        print('Train samples: ',train_samples,', Test samples: ', test_samples)
+        x_test = np.append(x_test,x[:test_samples],axis=0)
+        y_test = np.append(y_test,y[:test_samples])
+        x_train = np.append(x_train,x[test_samples:],axis=0)
+        y_train = np.append(y_train,y[test_samples:])
 
     x_test = x_test[1:]
     x_train = x_train[1:]
@@ -54,11 +58,9 @@ def load_hog():
 
 # load HOG
 (x_train, y_train), (x_test, y_test), num_classes = load_hog()
-print(x_train.shape, ' train samples')
-print(x_test.shape, ' test samples')
+print('Total train samples: ',x_train.shape)
+print('Total test samples: ',x_test.shape)
 
-print(y_train.shape)
-print(y_test.shape)
 # convert class vectors to binary class matrices
 y_train = keras.utils.to_categorical(y_train, num_classes)
 y_test  = keras.utils.to_categorical(y_test,  num_classes)
@@ -78,7 +80,8 @@ earlystop=EarlyStopping(monitor='val_loss', patience=5,
 model = Sequential()
 
 # Single layer perceptron
-model.add(Dense(num_classes, activation='softmax', input_shape=(num_tiles,)))
+model.add(Dense(512, activation='relu', input_shape=(num_tiles,)))
+model.add(Dense(num_classes, activation='softmax'))
 
 model.compile(loss='categorical_crossentropy',
               optimizer=RMSprop(),
