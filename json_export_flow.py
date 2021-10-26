@@ -1,7 +1,6 @@
 
 import json
-import sys, os
-import codecs, unicodedata
+from scipy import sparse
 import re, random
 import cv2
 import numpy as np
@@ -14,6 +13,7 @@ warnings.filterwarnings("ignore")
 # Ours
 
 from cv_scripts.pot_det import detect_pots
+from cv_scripts.pot_det_cv import detect_pots_cv, encuentra_box
 from cv_scripts.flow_hog import mi_gradiente
 from cv_scripts.libs import mi_hog
 
@@ -24,7 +24,6 @@ import argparse
 # Format: (X0, Y0, w, h)
 def getROI(frame, coco_pred, padding, width, height, flow):
 
-    # x1,x2,y1,y2 = funcioncarlos(frame)
     pots = detect_pots(frame, coco_pred, padding)
 
     if len(pots) > 0:
@@ -66,6 +65,71 @@ def getROI(frame, coco_pred, padding, width, height, flow):
 
         return None
 
+# Return the region of interest top-left and bottom-right corners
+# Call only with the first frame of each fragment, then use cropROI with the returned values.
+# Format: (X0, Y0, w, h)
+def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow, VIS):
+
+    blurri = 5
+
+    try:
+        pots = detect_pots_cv(cap, init_frame, n_search_frames, blurri, VIS)
+    except OverflowError as of:
+        print("After the Overflow error", of, "skipping")
+        pots = []
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
+
+    if len(pots) > 0:
+
+        # Get the pot with the most flow near it
+        most_flow_index = 0
+        if len(pots) > 1:
+
+            averages = []
+            for pot in pots:
+                c, axes, _ = pot
+
+                area = int((axes[0]+axes[1]) / 3)
+
+                areax = [slice(int(c[1]-area),int(c[1]+area)), 
+                         slice(int(c[0]-area),int(c[0]+area)), 0]
+                areay = [slice(int(c[1]-area),int(c[1]+area)), 
+                         slice(int(c[0]-area),int(c[0]+area)), 1]
+                
+                fx, fy = flow[tuple(areax)], flow[tuple(areay)] 
+                v = np.sqrt(fx * fx + fy * fy)
+
+                averages.append(np.average(v[np.nonzero(v)]))
+
+            #print(averages)
+            try:
+                most_flow_index = np.nanargmax(averages)
+            except ValueError as e:
+                print("Value error")
+                return None
+            #print(most_flow_index)
+            
+        bbox, _ = encuentra_box(pots[most_flow_index])
+        x1, y1, x2, y2 = bbox
+
+        x2 = x2-x1
+        y2 = y2-y1
+
+        #Padding
+        x1,x2,y1,y2 = x1-padding, x2+padding, y1-padding, y2+padding
+
+        if x1 < 0 : x1 = 0
+        if x1+x2 >= width : x2 = width - x1
+        if y1 < 0 : y1 = 0
+        if y1+y2 >= height : y2 = height - y1        
+
+        return int(x1), int(y1), int(x2), int(y2)
+
+    else:
+
+        return None
+
 def getVidPath(jsondata, localpath, vid):
     namepath = jsondata['file'][vid]['fname']
     return localpath + namepath
@@ -93,6 +157,8 @@ def main():
     parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
     parser.add_argument('-f',"--frames", type=int, default=FRAMES_PER_SEQ, help="Frames per sequence")
     parser.add_argument('-acc',"--flow_accomulate", type=int, default=FLOW_ACC, help="Flows to acommulate before HOG processing")
+    parser.add_argument('-aug',"--augmentation", action="store_true", help="Add data augmentation flipping the frames")
+
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -103,6 +169,7 @@ def main():
     VIS = args.visualize
 
     FLOW_ACC = args.flow_accomulate
+    DATA_AUGMENTATION = args.augmentation
     
     file1 = args.json_dir
 
@@ -115,7 +182,7 @@ def main():
     f1.close()
 
     if args.videos_folder == "none":
-        localpath = data1['config']['file']['loc_prefix']['1']
+        localpath = data1['config']['file']['loc_prefix']['1'][8:]
     else:
         localpath = args.videos_folder
     
@@ -233,93 +300,170 @@ def main():
         if (cap.isOpened()== False): 
             print("Error opening video  file")
             continue
-        
-        # Read until video is completed
-        frame_i = init_frame
-        final_frame = frame_i + args.frames
-
-        # Corners for ROI
-        roix1, roix2, roiy1, roiy2 = 0,0,0,0
 
         roi_window = None
-        not_roi_count = 0
 
         CTTE = 1 # Constat for CTTE * flow
 
         flow_count = 0
         last_gray_frames = [None, None]
+        last_gray_frames_flip = [None, None]
 
-        # First frame for flow
-        ret, frame = cap.read()
-        last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        #Get first frame with considerable optical flow
+
+        not_flow = True
+        frame_i = init_frame
+
+        acc_flow = None
+        FRAMES_TO_SEARCH = 100
+        for fi in range(FRAMES_TO_SEARCH):
+            ret, frameflow1 = cap.read()
+            ret, frameflow2 = cap.read()
+
+            frameflow1 = cv2.cvtColor(frameflow1, cv2.COLOR_BGR2GRAY)
+            frameflow2 = cv2.cvtColor(frameflow2, cv2.COLOR_BGR2GRAY)
+
+            flowFB = cv2.calcOpticalFlowFarneback(frameflow1, frameflow2, 
+                                    None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
+            #Acc flow
+            if fi == 0:
+                acc_flow = flowFB
+            else:
+                acc_flow += flowFB
+
+            # Average flow
+
+            fx, fy = flowFB[:,0], flowFB[:,1] 
+            v = np.sqrt(fx * fx + fy * fy)
+            average = np.average(v[np.nonzero(v)])
+
+            #print("average flow:", average)
+
+            #cv2.imshow("FRAMES",frameflow1)
+            #cv2.waitKey(20)
+
+            if average > 0.01 and not_flow:
+                not_flow = False
+                init_frame = frame_i - 1
+                break
+                
+
+            frame_i = frame_i + 2
+
+        if not_flow:
+            continue
+        
+        #init_frame = frame_i - 2
+        final_frame = init_frame + args.frames
+
+        if final_frame - init_frame < args.frames:
+            continue
+
+        if final_frame > frame_count:
+            continue
+
+        
+
+        # Get roi
+        n_search_frames = 5
+        roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
+        if roi is not None:
+            x1, y1, x2, y2 = roi
+            roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
+        else:
+            print("No ROI")
+            continue
+
         
         sequence = []
-        while(cap.isOpened() and not_roi_count < 5):
+        sequence_aug = []
+        cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
+        last_gray_frames[1] = cv2.resize(frameflow1[tuple(roi_window)],(args.dimension,args.dimension))
+        last_gray_frames_flip[1] = cv2.resize(cv2.flip(frameflow1[tuple(roi_window)],1),(args.dimension,args.dimension))
+        bad_hog = 0
+        while(cap.isOpened()):
             # Capture frame-by-frame
             ret, frame = cap.read()
+
             if frame_i <= final_frame and ret == True: 
+                
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(args.dimension,args.dimension))
 
                 # Update Last Frames
                 last_gray_frames[0] = last_gray_frames[1]
-                last_gray_frames[1] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
+                last_gray_frames[1] = roi_frame
+            
                 #Calcular flujo optico
                 flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
                                 None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
-                #DONE Detectar la ROI una vez para todo el fragmento
-                if roi_window is None:
-                    roi = getROI(frame, coco_predictor, args.padding, width, height, flowFB)
+                if DATA_AUGMENTATION:
+                    roi_flip_frame = cv2.flip(roi_frame, 1)
+                    last_gray_frames_flip[0] = last_gray_frames_flip[1]
+                    last_gray_frames_flip[1] = roi_flip_frame
+                    flowFB_flip = cv2.calcOpticalFlowFarneback(last_gray_frames_flip[0], last_gray_frames_flip[1], 
+                                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
-                    if roi is not None:
-
-                        x1, y1, x2, y2 = roi
-                        roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
-                    
-                    else:
-
-                        not_roi_count = not_roi_count + 1
-
-                else:
-
+                # Visualization
+                if VIS:
                     img_roi = frame[tuple(roi_window)]
                     img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
-                    #img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
+                    cv2.imshow("ROI", img_roi)
+                    cv2.imshow("Image", frame)
+                    cv2.waitKey(100)
+
+                #Acomular y hacer histograma
+                    
+                if flow_count == 0:
+                    flow = CTTE * flowFB
+                    if DATA_AUGMENTATION:
+                        flow_flip = CTTE * flowFB_flip
+
+                else:
+                    flow += CTTE * flowFB
+                    if DATA_AUGMENTATION:
+                        flow_flip += CTTE * flowFB_flip
+                
+                flow_count = flow_count + 1
+                        
+                if flow_count >= FLOW_ACC:
+                    flow_count = 0
+
+                    roi_flow = flow
+                    modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
 
                     # Visualization
                     if VIS:
-                        cv2.imshow("ROI", img_roi)
-                        cv2.waitKey(100)
-                        visualiced = True
+                        hog_image = normalized_blocks[1]
+                        hog_image = np.uint8(hog_image)
+                        hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
+                        cv2.imshow('hog', hog_image)
+                        normalized_blocks = normalized_blocks[0]
 
-                    #Acomular y hacer histograma
-                    if flow_count >= FLOW_ACC:
-                        flow_count = 0
+                    fx, fy = roi_flow[:,0], roi_flow[:,1] 
+                    v = np.sqrt(fx * fx + fy * fy)
+                    count_flow = np.count_nonzero(v[v >0.5])/(v.shape[0]*v.shape[1])
+                    #print("Count flow_roi: ", count_flow)
+                    if count_flow <= 0.2:
+                        bad_hog = bad_hog + 1
+                        if bad_hog > 5:
+                            print("No flow, skipping")
+                            break
 
-                        roi_flow = flow[tuple(roi_window)]
-                        roi_flow = cv2.resize(roi_flow,(args.dimension,args.dimension))
+                    #Add hog features to sequence
+                    #print("Len Hog: ",len(normalized_blocks))
+                    sequence.append(normalized_blocks)  
+
+                    if DATA_AUGMENTATION:
+                        roi_flow = flow_flip
                         modulo, argumento, argumento2 = mi_gradiente(roi_flow)
                         normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
                                                                 cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
-
-                        # Visualization
-                        if VIS:
-                            hog_image = normalized_blocks[1]
-                            hog_image = np.uint8(hog_image)
-                            hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
-                            cv2.imshow('hog', hog_image)
-                            normalized_blocks = normalized_blocks[0]
-
-                        #Add hog features to sequence
-                        sequence.append(normalized_blocks)
-                    
-                    else:
-                        flow_count = flow_count + 1
-                        
-                        if flow_count == 1:
-                            flow = CTTE * flowFB
-                        else:
-                            flow += CTTE * flowFB
+                        sequence_aug.append(normalized_blocks)  
 
                 frame_i =  frame_i + 1
             
@@ -331,14 +475,21 @@ def main():
 
         # End framgnet processing
 
-        if len(sequence) != int(args.frames/(FLOW_ACC+1)):
+        if len(sequence) != int(args.frames/FLOW_ACC):
             continue
-
+        
+        #print("len seq: ", len(sequence))
         #Sequence and action
         class_id = frag['class']
         y.append(class_id)
         X.append(np.array(sequence))
-        
+
+        if DATA_AUGMENTATION:
+            y.append(class_id)
+            X.append(np.array(sequence_aug))
+
+        #print("Len X: ", len(X))
+
         cap.release()
         frag_count = frag_count + 1
         t.update()
@@ -351,7 +502,11 @@ def main():
     #X = X.reshape(total_fragments, 9*16*16*3*3, 1)
 
     y = np.array(y)
+
     X = np.array(X)
+
+    print(X.shape)
+    print(y.shape)
 
     np.savez(out_file + ".npz", a=X, b=y)
 
