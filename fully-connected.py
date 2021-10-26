@@ -4,7 +4,8 @@ Fully connected neural network for class prediction
 
 import keras
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Input, Dense, Dropout
+from keras.layers.experimental import RandomFourierFeatures
 from keras.callbacks import EarlyStopping
 from keras.optimizers import RMSprop, Adam, SGD
 import numpy as np
@@ -66,27 +67,27 @@ y_train = keras.utils.to_categorical(y_train, num_classes)
 y_test  = keras.utils.to_categorical(y_test,  num_classes)
 
 # random permutation of training data
-np.random.seed(0)
-p = np.arange(x_train.shape[0])
-np.random.shuffle(p)
-x_train = x_train[p]
-y_train = y_train[p]
+# np.random.seed(0)
+# p = np.arange(x_train.shape[0])
+# np.random.shuffle(p)
+# x_train = x_train[p]
+# y_train = y_train[p]
 
 # Stop training when validation error no longer improves
-earlystop=EarlyStopping(monitor='val_loss', patience=5, 
+earlystop=EarlyStopping(monitor='val_loss', patience=3, 
                         verbose=1, mode='auto')
 
 # Model definition
 model = Sequential()
-
-# Single layer perceptron
-model.add(Dense(512, activation='relu', input_shape=(num_tiles,)))
+model.add(Input(shape=(num_tiles,)))
+model.add(RandomFourierFeatures(4096))
 model.add(Dense(num_classes, activation='softmax'))
 
 model.compile(loss='categorical_crossentropy',
-              optimizer=RMSprop(),
+              optimizer=Adam(),
               metrics=['accuracy'])
 
+print('Commencing training...')
 # Model training
 model.fit(x_train, y_train,
     batch_size=5,

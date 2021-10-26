@@ -3,11 +3,8 @@
 from sklearn import decomposition
 from sklearn.manifold import TSNE
 from matplotlib import pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
-import cv2
 import numpy as np
-import torch
 import sys
 
 
