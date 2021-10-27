@@ -13,18 +13,65 @@ warnings.filterwarnings("ignore")
 # Ours
 
 from cv_scripts.pot_det import detect_pots
-from cv_scripts.pot_det_cv import detect_pots_cv, encuentra_box
+from cv_scripts.pot_det_cv import detect_pots_cv, encuentra_box, iou
 from cv_scripts.flow_hog import mi_gradiente
 from cv_scripts.libs import mi_hog
 
 import argparse
 
+def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
+
+    total_pots = []
+
+    for i in range(n_frames):
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        pots = detect_pots(frame, coco_pred, 0)
+            
+        for pot in pots:
+            add = True
+            b1 = pot[0], pot[1], pot[0]+pot[2], pot[1]+pot[3]
+            for pot_b in total_pots:
+
+                b2 = pot_b[0], pot_b[1], pot_b[0]+pot_b[2], pot_b[1]+pot_b[3]
+                eiou = iou(b1,b2)
+                print(pot_b, pot, eiou)
+                if eiou >= 0.5:
+                    add = False
+                    break
+            
+            if add:
+                total_pots.append(pot)
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
+
+    ret_pots = []
+    for pot in total_pots:
+        x1, y1, x2, y2 = pot
+        c = (x1+int(x2/2), y1+int(y2/2))
+        e = (c,(x2,y2),0)
+        ret_pots.append(e)
+
+    return ret_pots
+
 # Return the region of interest top-left and bottom-right corners
 # Call only with the first frame of each fragment, then use cropROI with the returned values.
 # Format: (X0, Y0, w, h)
-def getROI(frame, coco_pred, padding, width, height, flow):
-
+def getROI(frame, coco_pred, padding, width, height, flow, VIS):
+    
     pots = detect_pots(frame, coco_pred, padding)
+
+    for pot in pots:
+        x1, y1, x2, y2 = pot
+        c = (x1+int(x2/2), y1+int(y2/2))
+        e = (c,(x2,y2),0)
+        cv2.ellipse(frame, e, (0,0,255), 4)
+    
+    if VIS:
+        cv2.imshow("LAS ELIPSES FINALES", frame)
 
     if len(pots) > 0:
 
@@ -111,6 +158,88 @@ def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow, VIS)
             #print(most_flow_index)
             
         bbox, _ = encuentra_box(pots[most_flow_index])
+        x1, y1, x2, y2 = bbox
+
+        x2 = x2-x1
+        y2 = y2-y1
+
+        #Padding
+        x1,x2,y1,y2 = x1-padding, x2+padding, y1-padding, y2+padding
+
+        if x1 < 0 : x1 = 0
+        if x1+x2 >= width : x2 = width - x1
+        if y1 < 0 : y1 = 0
+        if y1+y2 >= height : y2 = height - y1        
+
+        return int(x1), int(y1), int(x2), int(y2)
+
+    else:
+
+        return None
+
+def getROI3(cap, init_frame, coco, n_search_frames, padding, width, height, flow, VIS):
+
+    blurri = 5
+
+    ret, frame = cap.read()
+
+    total_pots = []
+
+    # CV approach
+    try:
+        pots_cv = detect_pots_cv(cap, init_frame, n_search_frames, blurri, False)
+    except OverflowError as of:
+        print("After the Overflow error", of, "skipping")
+        pots_cv = []
+
+    total_pots = total_pots + pots_cv
+    
+    # Detectron2 approach
+    pots_det = detect_pots_det_n(cap, init_frame, 1, coco)         
+
+    total_pots = total_pots + pots_det
+
+    if VIS:
+        for pot in pots_cv:
+            cv2.ellipse(frame, pot, (0,0,255), 4)
+        for pot in pots_det:
+            cv2.ellipse(frame, pot, (255,0,0), 4)
+        cv2.imshow("LAS ELIPSES FINALES", frame)
+    
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
+
+    if len(total_pots) > 0:
+
+        # Get the pot with the most flow near it
+        most_flow_index = 0
+        if len(total_pots) > 1:
+
+            averages = []
+            for pot in total_pots:
+                c, axes, _ = pot
+
+                area = int((axes[0]+axes[1]) / 4)
+
+                areax = [slice(int(c[1]-area),int(c[1]+area)), 
+                         slice(int(c[0]-area),int(c[0]+area)), 0]
+                areay = [slice(int(c[1]-area),int(c[1]+area)), 
+                         slice(int(c[0]-area),int(c[0]+area)), 1]
+                
+                fx, fy = flow[tuple(areax)], flow[tuple(areay)] 
+                v = np.sqrt(fx * fx + fy * fy)
+
+                averages.append(np.nanmean(v[np.nonzero(v)]))
+
+            #print(averages)
+            try:
+                most_flow_index = np.argmax(averages)
+            except ValueError as e:
+                print("Value error")
+                return None
+            #print(most_flow_index)
+            
+        bbox, _ = encuentra_box(total_pots[most_flow_index])
         x1, y1, x2, y2 = bbox
 
         x2 = x2-x1
@@ -346,8 +475,7 @@ def main():
             if average > 0.01 and not_flow:
                 not_flow = False
                 init_frame = frame_i - 1
-                break
-                
+                break                
 
             frame_i = frame_i + 2
 
@@ -366,8 +494,13 @@ def main():
         
 
         # Get roi
+        cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame - 50)
+        ret, frame = cap.read()
         n_search_frames = 5
-        roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
+        #roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
+        
+        roi = getROI3(cap, init_frame, coco_predictor, n_search_frames, args.padding, width, height, acc_flow, VIS)
+
         if roi is not None:
             x1, y1, x2, y2 = roi
             roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
@@ -433,7 +566,11 @@ def main():
 
                     roi_flow = flow
                     modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+
+                    orientations = 9
+                    pixels_per_cell = (16, 16)
+
+                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
                                                             cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
 
                     # Visualization
@@ -444,13 +581,15 @@ def main():
                         cv2.imshow('hog', hog_image)
                         normalized_blocks = normalized_blocks[0]
 
-                    fx, fy = roi_flow[:,0], roi_flow[:,1] 
-                    v = np.sqrt(fx * fx + fy * fy)
-                    count_flow = np.count_nonzero(v[v >0.5])/(v.shape[0]*v.shape[1])
-                    #print("Count flow_roi: ", count_flow)
-                    if count_flow <= 0.2:
+                    #fx, fy = roi_flow[:,0], roi_flow[:,1] 
+                    #v = np.sqrt(fx * fx + fy * fy)
+                    all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
+                    count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
+
+                    print("Count flow_roi: ", count_flow)
+                    if count_flow <= 0.05:
                         bad_hog = bad_hog + 1
-                        if bad_hog > 5:
+                        if bad_hog > 3:
                             print("No flow, skipping")
                             break
 

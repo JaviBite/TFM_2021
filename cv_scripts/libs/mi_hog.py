@@ -206,10 +206,45 @@ def hog(magnitude, orientation, number_of_orientations=9, pixels_per_cell=(16, 1
     feature vector for use in the window classifier.
     """
       
+
     normalized_blocks = normalized_blocks.ravel()
+    # normalized_blocks_out = np.zeros((normalized_blocks.shape[0], normalized_blocks.shape[1], number_of_orientations), dtype=float)
+
+    # for r in range(normalized_blocks.shape[0]):
+    #         for c in range(normalized_blocks.shape[1]):
+    #             for o in orientations_arr:
+    #                 normalized_blocks_out[r, c, o] = np.mean(normalized_blocks[r,c,:,:,o])
+
+    
+
+    # if visualize:
+
+    #     radius = min(c_row, c_col) // 2 - 1
+    #     orientations_arr = np.arange(number_of_orientations)
+    #     # set dr_arr, dc_arr to correspond to midpoints of orientation bins
+    #     orientation_bin_midpoints = (
+    #         np.pi * (orientations_arr + .5) / number_of_orientations)
+    #     dr_arr = radius * np.sin(orientation_bin_midpoints)
+    #     dc_arr = radius * np.cos(orientation_bin_midpoints)
+    #     hog_image = np.zeros((s_row, s_col), dtype=float)
+    #     for r in range(normalized_blocks.shape[0]):
+    #         for c in range(normalized_blocks.shape[1]):
+    #             for o, dr, dc in zip(orientations_arr, dr_arr, dc_arr):
+    #                 centre = tuple([r * c_row + c_row // 2,
+    #                                 c * c_col + c_col // 2])
+    #                 rr, cc = line(int(centre[0] - dc),
+    #                               int(centre[1] + dr),
+    #                               int(centre[0] + dc),
+    #                               int(centre[1] - dr))
+    #                 hog_image[rr, cc] += normalized_blocks_out[r, c, o]
 
     if visualize:
-        return normalized_blocks, hog_image
+        return orientation_histogram, hog_image
+    else:
+        return orientation_histogram 
+
+    if visualize:
+        return normalized_blocks_out, hog_image * 255
     else:
         return normalized_blocks    
     
