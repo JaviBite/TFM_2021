@@ -33,7 +33,7 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
     model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout)))
     model.add(Dropout(dropouts[1]))
     #model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation=hidden_act))
+    model.add(Dense(hidden_dense_untis, activation = hidden_act))
     model.add(Dropout(dropouts[2]))
     model.add(Dense(num_classes, activation = final_act))
 
@@ -51,12 +51,17 @@ def main():
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
 
-    N_CLASSES = 2
+    N_CLASSES = 3
     y = []
+    
+    count_classes = [0] * N_CLASSES
     for yi in labels:
         to_append = np.zeros(N_CLASSES)
         to_append[yi] = 1
+        count_classes[yi] += 1
         y.append(to_append)
+        
+    print("Count classes:",count_classes)
 
     y = np.array(y).reshape((len(labels), N_CLASSES))
 
@@ -76,15 +81,15 @@ def main():
     # do experiments
     NUM_EXP = 6
 
-    lr = [0.1, 0.01, 0.001, 0.1, 0.01, 0.001]
-    lstm_units = [50] * NUM_EXP
+    lr = [0.001] * NUM_EXP
+    lstm_units = [50,100,200,50,100,200]
     rec_drop = [0.2] * NUM_EXP
     lstm_act = ['tanh'] * NUM_EXP
     lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
     final_act = ['softmax'] * NUM_EXP
     hidden_act = ['relu'] * NUM_EXP
-    dropouts = [[0.5,0.3,0.2]] * NUM_EXP
-    hidden_dense_untis = [50] * NUM_EXP
+    dropouts = [[0.3,0.2,0.1]] * NUM_EXP
+    hidden_dense_untis = [50,100,200,50,100,200]
 
     optimizers = ['adam', 'adam', 'adam', 'sgd', 'sgd', 'sgd']
     losses = ['categorical_crossentropy'] * NUM_EXP
@@ -106,7 +111,7 @@ def main():
         #print(model.summary())
 
         # Early Estopping
-        es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=100)
         history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
                                 callbacks=[es], shuffle=True, verbose=0)
 
