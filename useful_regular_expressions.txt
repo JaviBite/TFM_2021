@@ -1,2 +1,2 @@
 accion poner sin cacerolas ni sartenes:
-poner (?!ollasarten)
+poner (?!olla|sarten)
