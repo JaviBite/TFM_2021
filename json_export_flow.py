@@ -13,11 +13,49 @@ warnings.filterwarnings("ignore")
 # Ours
 
 from cv_scripts.pot_det import detect_pots
-from cv_scripts.pot_det_cv import detect_pots_cv, encuentra_box
+from cv_scripts.pot_det_cv import detect_pots_cv, encuentra_box, iou
 from cv_scripts.flow_hog import mi_gradiente
 from cv_scripts.libs import mi_hog
 
 import argparse
+
+def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
+
+    total_pots = []
+
+    for i in range(n_frames):
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        pots = detect_pots(frame, coco_pred, 0)
+            
+        for pot in pots:
+            add = True
+            b1 = pot[0], pot[1], pot[0]+pot[2], pot[1]+pot[3]
+            for pot_b in total_pots:
+
+                b2 = pot_b[0], pot_b[1], pot_b[0]+pot_b[2], pot_b[1]+pot_b[3]
+                eiou = iou(b1,b2)
+                print(pot_b, pot, eiou)
+                if eiou >= 0.5:
+                    add = False
+                    break
+            
+            if add:
+                total_pots.append(pot)
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
+
+    ret_pots = []
+    for pot in total_pots:
+        x1, y1, x2, y2 = pot
+        c = (x1+int(x2/2), y1+int(y2/2))
+        e = (c,(x2,y2),0)
+        ret_pots.append(e)
+
+    return ret_pots
 
 # Return the region of interest top-left and bottom-right corners
 # Call only with the first frame of each fragment, then use cropROI with the returned values.
@@ -145,39 +183,40 @@ def getROI3(cap, init_frame, coco, n_search_frames, padding, width, height, flow
 
     ret, frame = cap.read()
 
+    total_pots = []
+
     # CV approach
     try:
-        pots = detect_pots_cv(cap, init_frame, n_search_frames, blurri, False)
+        pots_cv = detect_pots_cv(cap, init_frame, n_search_frames, blurri, False)
     except OverflowError as of:
         print("After the Overflow error", of, "skipping")
-        pots = []
+        pots_cv = []
+
+    total_pots = total_pots + pots_cv
     
     # Detectron2 approach
-    pots_det = detect_pots(frame, coco, padding)
-    
-    for pot in pots_det:
-        x1, y1, x2, y2 = pot
-        c = (x1+int(x2/2), y1+int(y2/2))
-        e = (c,(x2,y2),0)
-        pots.append(e)
+    pots_det = detect_pots_det_n(cap, init_frame, 1, coco)         
 
+    total_pots = total_pots + pots_det
 
     if VIS:
-        for pot in pots:
+        for pot in pots_cv:
             cv2.ellipse(frame, pot, (0,0,255), 4)
+        for pot in pots_det:
+            cv2.ellipse(frame, pot, (255,0,0), 4)
         cv2.imshow("LAS ELIPSES FINALES", frame)
     
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
 
-    if len(pots) > 0:
+    if len(total_pots) > 0:
 
         # Get the pot with the most flow near it
         most_flow_index = 0
-        if len(pots) > 1:
+        if len(total_pots) > 1:
 
             averages = []
-            for pot in pots:
+            for pot in total_pots:
                 c, axes, _ = pot
 
                 area = int((axes[0]+axes[1]) / 4)
@@ -200,7 +239,7 @@ def getROI3(cap, init_frame, coco, n_search_frames, padding, width, height, flow
                 return None
             #print(most_flow_index)
             
-        bbox, _ = encuentra_box(pots[most_flow_index])
+        bbox, _ = encuentra_box(total_pots[most_flow_index])
         x1, y1, x2, y2 = bbox
 
         x2 = x2-x1
@@ -457,7 +496,7 @@ def main():
         # Get roi
         cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame - 50)
         ret, frame = cap.read()
-        n_search_frames = 10
+        n_search_frames = 5
         #roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
         
         roi = getROI3(cap, init_frame, coco_predictor, n_search_frames, args.padding, width, height, acc_flow, VIS)
