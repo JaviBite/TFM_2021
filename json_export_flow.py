@@ -407,17 +407,20 @@ def main():
     if args.balance:
         print("Classifing fragments in ", len(words), "classes...")
         # Stack of fragments
-        class_stacks = [] * len(words)
+        class_stacks = [[] for _ in range(len(words))]
+        fragments_left = [True] * len(words) 
 
         for frag in fragments:
-            class_stacks[frag['class']].append(frag)
+            class_id = frag['class']
+            class_stacks[class_id].append(frag)
 
         print("Stacks:")
-        for ind, stack in enumerate(class_stacks):
-            print(words[ind], " -> ", len(stack))
+        for ind in range(len(class_stacks)):
+            print(words[ind], " -> ", len(class_stacks[ind]))
+
 
     disbalance_count = 0
-    count_classes = [0] * len(words)
+    count_classes = np.zeros(len(words))
     t = tqdm(total=total_fragments)
     X = []
     y = []
@@ -426,24 +429,24 @@ def main():
     while frag_i < len(fragments):
         frag_i += 1
 
-        frag = fragments[frag_i]
         if args.balance:
             
-            if disbalance_count <= 0:
-                #Check the minimun class
-                min_class_id = np.argmin(count_classes)
-                if len(class_stacks[min_class_id]) > 0:
-                    frag = class_stacks[min_class_id].pop()
-                else:
-                    disbalance_count = disbalance_count + 1
-            
+            #Check the minimun class
+            min_class_id = np.argmin(count_classes[fragments_left])
+            if len(class_stacks[min_class_id]) > 0:
+                frag = class_stacks[min_class_id].pop()
             else:
-                disbalance_count += 1
+                fragments_left[min_class_id] = False
+                disbalance_count = disbalance_count + 1
 
                 if disbalance_count > 30:
                     print("Stopping to avoid disbalance over 30...")
                     break
 
+                frag_i -= 1
+                continue
+        else:
+            frag = fragments[frag_i]
         
         # Create a VideoCapture object and some useful data
         videoPath = frag['vpath']
