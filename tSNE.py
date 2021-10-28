@@ -70,6 +70,7 @@ def main():
         ############################################################
         # Project the data in 2D
         X_3d = tsne.fit_transform(Xpca)
+        print(X_3d.shape)
 
         ############################################################
         # Visualize the data

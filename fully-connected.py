@@ -9,14 +9,18 @@ from keras.layers.experimental import RandomFourierFeatures
 from keras.callbacks import EarlyStopping
 from keras.optimizers import RMSprop, Adam, SGD
 import numpy as np
+from sklearn import decomposition
+from sklearn.manifold import TSNE
 
 
-num_tiles = 117**2 # Number of inputs for the neural network
+num_tiles = 15*15*9 # Number of inputs for the neural network
 classes = [] # (id,classname) pairs will be stored here when reading the metadata file
+input_shape = (num_tiles,)
+mf = 100
 
-path = 'D:\\GI Lab\\'
-data_path = path+'out_test_aug_500_1_p10.npz'
-metadata_path = path+'out_test_aug_500_1_p10_metadata.txt'
+path = 'D:\\GI Lab\\Pruebas acc\\'
+data_path = path+'out_flow_f20_mf100.npz'
+metadata_path = path+'out_flow_f20_mf100_metadata.txt'
 
 def load_hog():
     print('Loading dataset...')
@@ -37,7 +41,8 @@ def load_hog():
 
     print('Separating test data...')
     for (i,_) in classes:
-        x = np.squeeze(data['a'][:])
+        x = np.reshape(data['a'],(mf,num_tiles))
+        x = (x - x.min())/(x.max()-x.min())
         y = data['b'][:]
         x = x[y==i]
         y = y[y==i]
@@ -62,6 +67,23 @@ def load_hog():
 print('Total train samples: ',x_train.shape)
 print('Total test samples: ',x_test.shape)
 
+# print('Performing PCA & tSNE')
+# pca = decomposition.PCA(n_components=50)
+# pca.fit(x_train)
+# x_train_pca = pca.transform(x_train)
+# tsne = TSNE(n_components=3, random_state=0)
+# x_train_3d = tsne.fit_transform(x_train_pca)
+
+# pca = decomposition.PCA(n_components=50)
+# pca.fit(x_test)
+# x_test_pca = pca.transform(x_test)
+# tsne = TSNE(n_components=3, random_state=0)
+# x_test_3d = tsne.fit_transform(x_test_pca)
+# print(x_train_3d.shape)
+# print(x_test_3d.shape)
+
+# input_shape = (3,)
+
 # convert class vectors to binary class matrices
 y_train = keras.utils.to_categorical(y_train, num_classes)
 y_test  = keras.utils.to_categorical(y_test,  num_classes)
@@ -74,13 +96,15 @@ y_test  = keras.utils.to_categorical(y_test,  num_classes)
 # y_train = y_train[p]
 
 # Stop training when validation error no longer improves
-earlystop=EarlyStopping(monitor='val_loss', patience=3, 
+earlystop=EarlyStopping(monitor='val_loss', patience=7, 
                         verbose=1, mode='auto')
 
 # Model definition
 model = Sequential()
-model.add(Input(shape=(num_tiles,)))
-model.add(RandomFourierFeatures(4096))
+model.add(Dense(512, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(512, activation='relu'))
+model.add(Dropout(0.2))
 model.add(Dense(num_classes, activation='softmax'))
 
 model.compile(loss='categorical_crossentropy',
@@ -91,7 +115,7 @@ print('Commencing training...')
 # Model training
 model.fit(x_train, y_train,
     batch_size=5,
-    epochs=20,
+    epochs=30,
     validation_split=0.1,
     callbacks=[earlystop],
     verbose=False)
