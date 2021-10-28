@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import cv2
 import numpy as np
 import torch
-import sys
+import sys, json
 
 
 def main():
@@ -17,7 +17,11 @@ def main():
     X, labels = files['a'], files['b']
     y = np.array(labels)
 
-    metadata = ['poner','remover','voltear']
+    metadata_file = file1.split('.')[0] + "_metadata.json"
+    metadata_in = open(metadata_file,)
+    metadata = json.load(metadata_in)
+
+    class_labels = metadata['classes']
 
     N_CLASSES = np.max(labels) + 1
     N_SAMPLES = X.shape[0]
@@ -73,7 +77,7 @@ def main():
 
         ############################################################
         # Visualize the data
-        target_names = metadata
+        target_names = class_labels
         target_ids = range(len(target_names))
 
         plt.figure(figsize=(6, 5))

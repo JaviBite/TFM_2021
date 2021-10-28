@@ -61,7 +61,11 @@ def main():
     HOG_W = X.shape[3]
     ORIENTATIONS = X.shape[4]
 
-    metadata = ['remover', 'poner']
+    metadata_file = file1.split('.')[0] + "_metadata.json"
+    metadata_in = open(metadata_file,)
+    metadata = json.load(metadata_in)
+
+    class_labels = metadata['classes']
 
     y = []
     
@@ -82,7 +86,6 @@ def main():
     #Visualizing
     for row_i in range(N_SAMPLES):
 
-        cv2.destroyAllWindows()
         for hog_i in range(N_TIMESTEPS):
             
             hog = X[row_i,hog_i,:,:,:]
@@ -90,11 +93,14 @@ def main():
 
             hog_image = hog_image / np.max(hog_image)
 
-            class_label = str(metadata[labels[row_i]])
+            class_label = str(class_labels[labels[row_i]])
+            (w, h), _ = cv2.getTextSize(str(row_i), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 1)
+            hog_image = img = cv2.rectangle(hog_image, (0, 0), (w + 2, 10), (255,255,255), -1)
+            hog_image = cv2.putText(hog_image, str(row_i), (2, 8), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,0), 1)
             cv2.imshow('HOG: ' + class_label ,hog_image.astype('float32'))
-            cv2.waitKey(200)
+            cv2.waitKey(20)
         
-        cv2.waitKey(1000)
+        cv2.waitKey(100)
 
 
 if __name__ == "__main__":
