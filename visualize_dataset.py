@@ -88,8 +88,10 @@ def main():
             hog = X[row_i,hog_i,:,:,:]
             hog_image = get_hog_image(hog, (16,16))
 
+            hog_image = hog_image / np.max(hog_image)
+
             class_label = str(metadata[labels[row_i]])
-            cv2.imshow('HOG: ' + class_label ,hog_image)
+            cv2.imshow('HOG: ' + class_label ,hog_image.astype('float32'))
             cv2.waitKey(200)
         
         cv2.waitKey(1000)
