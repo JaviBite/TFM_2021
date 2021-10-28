@@ -272,7 +272,7 @@ def main():
     ROI_DIM = 250
     DET_PAD = 0
 
-    FRAMES_PER_SEQ = 100
+    FRAMES_PER_SEQ = 50
 
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")

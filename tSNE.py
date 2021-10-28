@@ -15,12 +15,33 @@ def main():
     file1 = sys.argv[1]
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
-    y = labels
+    y = np.array(labels)
 
-    X = X.reshape(X.shape[0],X.shape[2])
+    metadata = ['poner','remover','voltear']
+
+    N_CLASSES = np.max(labels) + 1
+    N_SAMPLES = X.shape[0]
+    N_TIMESTEPS = X.shape[1]
+
+    HOG_H = X.shape[2]
+    HOG_W = X.shape[3]
+    ORIENTATIONS = X.shape[4]
+
+    if N_TIMESTEPS == 1:
+        X = X.reshape(N_SAMPLES,HOG_H*HOG_W*ORIENTATIONS)
+    else:
+        #X = X[:,1,:,:,:]
+        #X = X.reshape(N_SAMPLES,HOG_H*HOG_W*ORIENTATIONS)
+        
+        #Xx = [X[i,1,:,:,:].ravel() for i in range(N_SAMPLES)]  
+        #X = np.array(Xx)
+        
+        X = X.reshape(N_SAMPLES*N_TIMESTEPS,HOG_H*HOG_W*ORIENTATIONS) 
+        y = [val for val in y for _ in range(N_TIMESTEPS)]  
+        y = np.array(y) 
 
     print(X.shape)
-    print(labels.shape)
+    print(y.shape)
 
     pca = decomposition.PCA(n_components=50)
     pca.fit(X)
@@ -52,7 +73,7 @@ def main():
 
         ############################################################
         # Visualize the data
-        target_names = ['poner','remover','voltear']
+        target_names = metadata
         target_ids = range(len(target_names))
 
         plt.figure(figsize=(6, 5))
