@@ -167,6 +167,11 @@ def hog(magnitude, orientation, number_of_orientations=9, pixels_per_cell=(16, 1
                                   int(centre[0] + dc),
                                   int(centre[1] - dr))
                     hog_image[rr, cc] += orientation_histogram[r, c, o]
+
+    if visualize:
+        return orientation_histogram, hog_image
+    else:
+        return orientation_histogram 
                     
                     
 

@@ -38,7 +38,7 @@ def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
 
                 b2 = pot_b[0], pot_b[1], pot_b[0]+pot_b[2], pot_b[1]+pot_b[3]
                 eiou = iou(b1,b2)
-                print(pot_b, pot, eiou)
+                #print(pot_b, pot, eiou)
                 if eiou >= 0.5:
                     add = False
                     break
@@ -272,7 +272,7 @@ def main():
     ROI_DIM = 250
     DET_PAD = 0
 
-    FRAMES_PER_SEQ = 100
+    FRAMES_PER_SEQ = 50
 
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")
@@ -586,7 +586,7 @@ def main():
                     all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
                     count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
 
-                    print("Count flow_roi: ", count_flow)
+                    #print("Count flow_roi: ", count_flow)
                     if count_flow <= 0.05:
                         bad_hog = bad_hog + 1
                         if bad_hog > 3:
