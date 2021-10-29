@@ -13,6 +13,11 @@ from numpy import cumsum
 from numpy import array_equal
 import numpy as np
 
+import sys
+sys.path.append("..")
+
+from cv_scripts.libs.mi_hog import normalize
+
 from sklearn.model_selection import train_test_split
 
 from keras.models import Sequential
@@ -39,12 +44,6 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
 
     return model
 
-def do_experiment(lr, opt, lstm_units, hidden_act, final_act, dropouts, epochs):
-
-    metrics = {}
-
-    return metrics
-
 def main():
     # Load data
     file1 = sys.argv[1]
@@ -59,9 +58,21 @@ def main():
     HOG_W = X.shape[3]
     ORIENTATIONS = X.shape[4]
 
+    # Normalice
+    X_norm = []
+    for row in range(N_SAMPLES):
+        add_samples = []
+        for sample in range(N_TIMESTEPS):
+            ortientation_hist = X[row,sample,:,:,:]
+            normalized_hist = normalize(ortientation_hist)
+            add_samples.append(normalized_hist)
+        X_norm.append(np.array(add_samples))
+
+    X_norm = np.array(X_norm)
+    X = X_norm
     
     # Ravel features into an array
-    X = X.reshape(N_SAMPLES,N_TIMESTEPS,HOG_H*HOG_W*ORIENTATIONS)
+    #X = X.reshape(N_SAMPLES,N_TIMESTEPS,HOG_H*HOG_W*ORIENTATIONS)
     y = []
     
     count_classes = [0] * N_CLASSES
