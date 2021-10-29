@@ -51,7 +51,17 @@ def main():
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
 
-    N_CLASSES = 3
+    N_CLASSES = np.max(labels) + 1
+    N_SAMPLES = X.shape[0]
+    N_TIMESTEPS = X.shape[1]
+
+    HOG_H = X.shape[2]
+    HOG_W = X.shape[3]
+    ORIENTATIONS = X.shape[4]
+
+    
+    # Ravel features into an array
+    X = X.reshape(N_SAMPLES,N_TIMESTEPS,HOG_H*HOG_W*ORIENTATIONS)
     y = []
     
     count_classes = [0] * N_CLASSES
