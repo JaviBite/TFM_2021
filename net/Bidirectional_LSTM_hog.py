@@ -19,6 +19,7 @@ sys.path.append("..")
 from cv_scripts.libs.mi_hog import normalize
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from keras.models import Sequential
 from keras.layers import LSTM
@@ -49,6 +50,12 @@ def main():
     file1 = sys.argv[1]
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
+
+    metadata_file = file1.rsplit('.',maxsplit=1)[0] + "_metadata.json"
+    metadata_in = open(metadata_file,)
+    metadata = json.load(metadata_in)
+
+    class_labels = metadata['classes']
 
     N_CLASSES = np.max(labels) + 1
     N_SAMPLES = X.shape[0]
@@ -90,7 +97,7 @@ def main():
     print("Y Shape: ", y.shape)
 
     val_percent = 0.2
-    trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent)
+    trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
 
     # define problem
     n_timesteps =  X.shape[1]
@@ -99,109 +106,90 @@ def main():
 
     INPUT_SHAPE = (n_timesteps, n_features)
 
-    # do experiments
-    NUM_EXP = 6
+    lr = [0.001]
+    lstm_units = [32]
+    rec_drop = [0.2]
+    lstm_act = ['tanh']
+    lstm_rec_act = ['hard_sigmoid']
+    final_act = ['softmax']
+    hidden_act = ['sigmoid']
+    dropouts = [[0.3,0.2,0.1]]
+    hidden_dense_untis = [16]
 
-    lr = [0.001] * NUM_EXP
-    lstm_units = [50,100,200,50,100,200]
-    rec_drop = [0.2] * NUM_EXP
-    lstm_act = ['tanh'] * NUM_EXP
-    lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
-    final_act = ['softmax'] * NUM_EXP
-    hidden_act = ['relu'] * NUM_EXP
-    dropouts = [[0.3,0.2,0.1]] * NUM_EXP
-    hidden_dense_untis = [50,100,200,50,100,200]
-
-    optimizers = ['adam', 'adam', 'adam', 'sgd', 'sgd', 'sgd']
-    losses = ['categorical_crossentropy'] * NUM_EXP
-    epochs = [30] * NUM_EXP
+    optimizers = ['adam']
+    losses = ['categorical_crossentropy']
+    epochs = [30]
 
     BATCH_SIZE = 10
+    i = 0
 
-    models_metrics = []
+    model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
+                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
+    opt = get(optimizers[i])
+    opt.learning_rate = lr[i]
+    model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
+    #print(model.summary())
 
-    # Run the combinations
-    t = tqdm(total=NUM_EXP)
-    for i in range(NUM_EXP):
+    # Early Estopping
+    es = EarlyStopping(monitor='val_loss', mode='min', patience=15)
+    history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
+                            callbacks=[es], shuffle=True, verbose=1)
 
-        model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
-                                lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
-        opt = get(optimizers[i])
-        opt.learning_rate = lr[i]
-        model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
-        #print(model.summary())
+    model_json = {'lr': lr[i],
+                'lstm_units': lstm_units[i],
+                'rec_drop': rec_drop[i],
+                'lstm_act': lstm_act[i],
+                'lstm_rec_act': lstm_rec_act[i],
+                'final_act': final_act[i],
+                'hidden_act': hidden_act[i],
+                'dropouts': dropouts[i],
+                'hidden_dense_untis': hidden_dense_untis[i],
+                'optimizers': optimizers[i],
+                'losses': losses[i],
+                'epochs': epochs[i]
+    }
 
-        # Early Estopping
-        es = EarlyStopping(monitor='val_loss', mode='min', patience=100)
-        history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                                callbacks=[es], shuffle=True, verbose=0)
-
-        model = {'lr': lr[i],
-                 'lstm_units': lstm_units[i],
-                 'rec_drop': rec_drop[i],
-                 'lstm_act': lstm_act[i],
-                 'lstm_rec_act': lstm_rec_act[i],
-                 'final_act': final_act[i],
-                 'hidden_act': hidden_act[i],
-                 'dropouts': dropouts[i],
-                 'hidden_dense_untis': hidden_dense_untis[i],
-                 'optimizers': optimizers[i],
-                 'losses': losses[i],
-                 'epochs': epochs[i]
-        }
-
-        metrics = history.history
-
-        to_append = {'model': model, 'history': metrics}
-
-        models_metrics.append(to_append)
-
-        t.update()
+    metrics = history.history
+    models_metrics = {'model': model_json, 'history': metrics}
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
     json.dump(models_metrics, out_file, indent=1)
 
+    model.save('out_model.h5')
+
+    # evaluate LSTM
+    #X, y = get_sequences(100, n_timesteps, size_elem)
+    loss, acc = model.evaluate(valX, valy, verbose=0)
+    print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
+
+    predict_x=model.predict(valX) 
+    yhat=np.round(predict_x,decimals=0)
+
+    fig, axs = pyplot.subplots(2, 1, constrained_layout=True)
+    axs[0].set_title('Loss')
+    axs[0].plot(history.history['loss'], label='train')
+    axs[0].plot(history.history['val_loss'], label='test')
+    axs[0].legend()
+    axs[0].set_xlabel('Epoch')
+    axs[0].set_ylabel('Loss')
+
+    axs[1].set_xlabel('Epoch')
+    axs[1].plot(history.history['acc'], label='train')
+    axs[1].plot(history.history['val_acc'], label='test')
+    axs[1].legend()
+    axs[1].set_title('Accuracy')
+    axs[1].set_ylabel('Accuracy')
+
+
+    # Confusion matrix
+    matrix = confusion_matrix(valy.argmax(axis=1), predict_x.argmax(axis=1), normalize='true')
+
+    disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=class_labels)
+    disp.plot()
+
     
-    if False:
-
-        model.save('out_model.h5')
-
-        # evaluate LSTM
-        #X, y = get_sequences(100, n_timesteps, size_elem)
-        loss, acc = model.evaluate(valX, valy, verbose=0)
-        print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
-
-        # make predictions
-        #X, y = get_sequences(1, n_timesteps, size_elem)
-
-        # Deprecated removed function predict_classes
-        # yhat = model.predict_classes(X, verbose=0)
-
-        predict_x=model.predict(valX) 
-        yhat=np.round(predict_x,decimals=0)
-
-        #exp, pred = y.reshape(n_timesteps), yhat.reshape(n_timesteps)
-
-        exp, pred = valy[0:10], yhat
-        print( 'y=%s, yhat=%s, correct=%s '% (exp, pred, array_equal(exp,pred)))
-
-        fig, axs = pyplot.subplots(2, 1, constrained_layout=True)
-        axs[0].set_title('Loss')
-        axs[0].plot(history.history['loss'], label='train')
-        axs[0].plot(history.history['val_loss'], label='test')
-        axs[0].legend()
-        axs[0].set_xlabel('Epoch')
-        axs[0].set_ylabel('Loss')
-
-        axs[1].set_xlabel('Epoch')
-        axs[1].plot(history.history['acc'], label='train')
-        axs[1].plot(history.history['val_acc'], label='test')
-        axs[1].legend()
-        axs[1].set_title('Accuracy')
-        axs[1].set_ylabel('Accuracy')
-
-        pyplot.show()
+    pyplot.show()
 
 if __name__ == "__main__":
     main()
