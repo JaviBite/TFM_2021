@@ -103,14 +103,14 @@ def main():
     NUM_EXP = 6
 
     lr = [0.001] * NUM_EXP
-    lstm_units = [8,16,32] * 2
-    rec_drop = [0.2] * NUM_EXP
+    lstm_units = [32] * NUM_EXP
+    rec_drop = [0.2, 0.4, 0.5] * 2
     lstm_act = ['tanh'] * NUM_EXP
     lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
     final_act = ['softmax'] * NUM_EXP
-    hidden_act = ['relu','relu','relu','sigmoid','sigmoid','sigmoid']
-    dropouts = [[0.3,0.2,0.1]] * NUM_EXP
-    hidden_dense_untis = [8,16,32] * 2
+    hidden_act = ['sigmoid'] * NUM_EXP
+    dropouts = [[0.5,0.5,0.2],[0.5,0.3,0.2],[0,0.5,0.3]] * NUM_EXP // 2
+    hidden_dense_untis = [32] * NUM_EXP
 
     optimizers = ['adam'] * NUM_EXP
     losses = ['categorical_crossentropy'] * NUM_EXP
