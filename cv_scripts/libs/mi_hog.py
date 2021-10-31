@@ -63,6 +63,57 @@ def _hog_normalize_block(block, method, eps=1e-5):
 
     return out
 
+def normalize(orientation_histogram, cells_per_block=(3, 3), block_norm='L2-Hys', number_of_orientations=9):
+
+    n_cells_row, n_cells_col = orientation_histogram.shape[:2]
+    b_row, b_col = cells_per_block
+
+    n_blocks_row = (n_cells_row - b_row) + 1
+    n_blocks_col = (n_cells_col - b_col) + 1
+
+    """
+    The next stage computes normalization, which takes local groups of
+    cells and contrast normalizes their overall responses before passing
+    to next stage. Normalization introduces better invariance to illumination,
+    shadowing, and edge contrast. It is performed by accumulating a measure
+    of local histogram "energy" over local groups of cells that we call
+    "blocks". The result is used to normalize each cell in the block.
+    Typically each individual cell is shared between several blocks, but
+    its normalizations are block dependent and thus different. The cell
+    thus appears several times in the final output vector with different
+    normalizations. This may seem redundant but it improves the performance.
+    We refer to the normalized block descriptors as Histogram of Oriented
+    Gradient (HOG) descriptors.
+    """
+
+    n_blocks_row = (n_cells_row - b_row) + 1
+    n_blocks_col = (n_cells_col - b_col) + 1
+    normalized_blocks = np.zeros(
+        (n_blocks_row, n_blocks_col, b_row, b_col, number_of_orientations),
+        dtype=float
+    )
+
+    for r in range(n_blocks_row):
+        for c in range(n_blocks_col):
+            block = orientation_histogram[r:r + b_row, c:c + b_col, :]
+            normalized_blocks[r, c, :] = \
+                _hog_normalize_block(block, method=block_norm)
+
+
+
+    """
+    The final step collects the HOG descriptors from all blocks of a dense
+    overlapping grid of blocks covering the detection window into a combined
+    feature vector for use in the window classifier.
+    """
+      
+
+    normalized_blocks = normalized_blocks.ravel()
+
+    return normalized_blocks
+
+
+
 
 
 def hog(magnitude, orientation, number_of_orientations=9, pixels_per_cell=(16, 16), 
@@ -167,6 +218,11 @@ def hog(magnitude, orientation, number_of_orientations=9, pixels_per_cell=(16, 1
                                   int(centre[0] + dc),
                                   int(centre[1] - dr))
                     hog_image[rr, cc] += orientation_histogram[r, c, o]
+
+    if visualize:
+        return orientation_histogram, hog_image
+    else:
+        return orientation_histogram 
                     
                     
 

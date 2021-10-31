@@ -38,7 +38,7 @@ def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
 
                 b2 = pot_b[0], pot_b[1], pot_b[0]+pot_b[2], pot_b[1]+pot_b[3]
                 eiou = iou(b1,b2)
-                print(pot_b, pot, eiou)
+                #print(pot_b, pot, eiou)
                 if eiou >= 0.5:
                     add = False
                     break
@@ -272,7 +272,7 @@ def main():
     ROI_DIM = 250
     DET_PAD = 0
 
-    FRAMES_PER_SEQ = 100
+    FRAMES_PER_SEQ = 50
 
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")
@@ -287,7 +287,7 @@ def main():
     parser.add_argument('-f',"--frames", type=int, default=FRAMES_PER_SEQ, help="Frames per sequence")
     parser.add_argument('-acc',"--flow_accomulate", type=int, default=FLOW_ACC, help="Flows to acommulate before HOG processing")
     parser.add_argument('-aug',"--augmentation", action="store_true", help="Add data augmentation flipping the frames")
-
+    parser.add_argument('-b',"--balance", action="store_true", help="Force balance between all the classes")
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -324,10 +324,23 @@ def main():
     print("Classes: ", words)
 
     # Save metadata
-    metafile = out_file.split('.')[0] + "_metadata.txt"
-    with open(metafile, "w") as f:
-        for idx, class_name in enumerate(words):
-            f.write(str(idx) + " : " + class_name + "\n")
+    metafile = out_file.split('.')[0] + "_metadata.json"
+
+    metadata = {}
+
+    metadata['classes'] = words
+
+    metadata['config'] = {'padding': args.padding,
+                          'fragments': -1,
+                          'seg_frames': args.frames,
+                          'accomulation': FLOW_ACC,
+                          'random': random_order,
+                          'roi_dim': args.dimension,
+                          'augmentation': DATA_AUGMENTATION,}
+
+    metadata_out = open(metafile, "w")
+    json.dump(metadata, metadata_out, indent=1)
+    metadata_out.close()
 
     video_ids = {}
     video_data = {}
@@ -391,11 +404,50 @@ def main():
 
     total_fragments = len(fragments) if max_out_frags is None else max_out_frags
 
+    if args.balance:
+        print("Classifing fragments in ", len(words), "classes...")
+        # Stack of fragments
+        class_stacks = [[] for _ in range(len(words))]
+        fragments_left = [True] * len(words) 
+
+        for frag in fragments:
+            class_id = frag['class']
+            class_stacks[class_id].append(frag)
+
+        print("Stacks:")
+        for ind in range(len(class_stacks)):
+            print(words[ind], " -> ", len(class_stacks[ind]))
+
+
+    disbalance_count = 0
+    count_classes = np.zeros(len(words))
     t = tqdm(total=total_fragments)
     X = []
     y = []
-    for frag in fragments:
 
+    frag_i = -1
+    while frag_i < len(fragments):
+        frag_i += 1
+
+        if args.balance:
+            
+            #Check the minimun class
+            min_class_id = np.argmin(count_classes[fragments_left])
+            if len(class_stacks[min_class_id]) > 0:
+                frag = class_stacks[min_class_id].pop()
+            else:
+                fragments_left[min_class_id] = False
+                disbalance_count = disbalance_count + 1
+
+                if disbalance_count > 30:
+                    print("Stopping to avoid disbalance over 30...")
+                    break
+
+                frag_i -= 1
+                continue
+        else:
+            frag = fragments[frag_i]
+        
         # Create a VideoCapture object and some useful data
         videoPath = frag['vpath']
         cap = cv2.VideoCapture(videoPath)
@@ -586,7 +638,7 @@ def main():
                     all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
                     count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
 
-                    print("Count flow_roi: ", count_flow)
+                    #print("Count flow_roi: ", count_flow)
                     if count_flow <= 0.05:
                         bad_hog = bad_hog + 1
                         if bad_hog > 3:
@@ -619,7 +671,9 @@ def main():
         
         #print("len seq: ", len(sequence))
         #Sequence and action
-        class_id = frag['class']
+        class_id = int(frag['class'])
+        count_classes[class_id] += 1
+
         y.append(class_id)
         X.append(np.array(sequence))
 
@@ -648,6 +702,8 @@ def main():
     print(y.shape)
 
     np.savez(out_file + ".npz", a=X, b=y)
+
+    print("Total classes count:", count_classes)
 
 if __name__ == "__main__":
     main()
