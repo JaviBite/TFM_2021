@@ -116,6 +116,8 @@ def main():
     losses = ['categorical_crossentropy'] * NUM_EXP
     epochs = [30] * NUM_EXP
 
+    to_vis = ['rec_drop','dropouts']
+
     BATCH_SIZE = 10
 
     models_metrics = []
@@ -152,7 +154,7 @@ def main():
 
         metrics = history.history
 
-        to_append = {'model': model, 'history': metrics}
+        to_append = {'model': model, 'history': metrics, 'vis': to_vis}
 
         models_metrics.append(to_append)
 
