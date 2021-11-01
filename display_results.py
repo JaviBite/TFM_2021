@@ -46,7 +46,7 @@ def main():
             label = ''
 
             for tag in experiment['vis']:
-                label += tag + "=" + experiment['model'][tag] + " "
+                label += tag + "=" + str(experiment['model'][tag]) + " "
 
         else:
             lr = experiment['model']['lr']

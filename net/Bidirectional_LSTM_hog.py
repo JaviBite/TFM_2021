@@ -26,7 +26,7 @@ from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import TimeDistributed
 from keras.layers import Bidirectional
-from keras.callbacks import EarlyStopping
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import SGD, Adam, get
 from tqdm import tqdm
 
@@ -131,9 +131,10 @@ def main():
     #print(model.summary())
 
     # Early Estopping
-    es = EarlyStopping(monitor='val_loss', mode='min', patience=15)
+    es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
+    reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
     history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                            callbacks=[es], shuffle=True, verbose=1)
+                            callbacks=[es, reduce_lr], shuffle=True, verbose=1)
 
     model_json = {'lr': lr[i],
                 'lstm_units': lstm_units[i],
