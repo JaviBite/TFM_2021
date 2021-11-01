@@ -163,7 +163,7 @@ def main():
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
-    json.dump(models_metrics, out_file, indent=1)
+    json.dump(str(models_metrics), out_file, indent=1)
 
     
     if False:

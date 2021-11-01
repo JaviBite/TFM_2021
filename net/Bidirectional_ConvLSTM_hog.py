@@ -19,6 +19,7 @@ sys.path.append("..")
 from cv_scripts.libs.mi_hog import normalize
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import keras
 from keras.models import Sequential
@@ -89,6 +90,12 @@ def main():
     HOG_W = X.shape[3]
     ORIENTATIONS = X.shape[4]
 
+    metadata_file = file1.rsplit('.',maxsplit=1)[0] + "_metadata.json"
+    metadata_in = open(metadata_file,)
+    metadata = json.load(metadata_in)
+
+    class_labels = metadata['classes']
+
     # Normalice
     X_norm = []
     for row in range(N_SAMPLES):
@@ -147,7 +154,7 @@ def main():
 
     optimizers = ['adam'] * NUM_EXP
     losses = ['categorical_crossentropy'] * NUM_EXP
-    epochs = [30] * NUM_EXP
+    epochs = [50] * NUM_EXP
 
     to_vis = ['rec_drop','dropouts']
 
@@ -170,7 +177,7 @@ def main():
         es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
         reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
         history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                                callbacks=[es, reduce_lr], shuffle=True, verbose=0)
+                                callbacks=[es, reduce_lr], shuffle=True, verbose=1)
 
 
         model = {'lr': lr[i],
@@ -199,46 +206,40 @@ def main():
     out_file = open("out_model_metrics.json", "w")
     json.dump(str(models_metrics), out_file, indent=1)
 
+    model.save('out_model.h5')
+
+    # evaluate LSTM
+    #X, y = get_sequences(100, n_timesteps, size_elem)
+    loss, acc = model.evaluate(valX, valy, verbose=0)
+    print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
+
+    predict_x=model.predict(valX) 
+    yhat=np.round(predict_x,decimals=0)
+
+    fig, axs = pyplot.subplots(2, 1, constrained_layout=True)
+    axs[0].set_title('Loss')
+    axs[0].plot(history.history['loss'], label='train')
+    axs[0].plot(history.history['val_loss'], label='test')
+    axs[0].legend()
+    axs[0].set_xlabel('Epoch')
+    axs[0].set_ylabel('Loss')
+
+    axs[1].set_xlabel('Epoch')
+    axs[1].plot(history.history['acc'], label='train')
+    axs[1].plot(history.history['val_acc'], label='test')
+    axs[1].legend()
+    axs[1].set_title('Accuracy')
+    axs[1].set_ylabel('Accuracy')
+
+
+    # Confusion matrix
+    matrix = confusion_matrix(valy.argmax(axis=1), predict_x.argmax(axis=1), normalize='true')
+
+    disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=class_labels)
+    disp.plot()
+
     
-    if False:
-
-        model.save('out_model.h5')
-
-        # evaluate LSTM
-        #X, y = get_sequences(100, n_timesteps, size_elem)
-        loss, acc = model.evaluate(valX, valy, verbose=0)
-        print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
-
-        # make predictions
-        #X, y = get_sequences(1, n_timesteps, size_elem)
-
-        # Deprecated removed function predict_classes
-        # yhat = model.predict_classes(X, verbose=0)
-
-        predict_x=model.predict(valX) 
-        yhat=np.round(predict_x,decimals=0)
-
-        #exp, pred = y.reshape(n_timesteps), yhat.reshape(n_timesteps)
-
-        exp, pred = valy[0:10], yhat
-        print( 'y=%s, yhat=%s, correct=%s '% (exp, pred, array_equal(exp,pred)))
-
-        fig, axs = pyplot.subplots(2, 1, constrained_layout=True)
-        axs[0].set_title('Loss')
-        axs[0].plot(history.history['loss'], label='train')
-        axs[0].plot(history.history['val_loss'], label='test')
-        axs[0].legend()
-        axs[0].set_xlabel('Epoch')
-        axs[0].set_ylabel('Loss')
-
-        axs[1].set_xlabel('Epoch')
-        axs[1].plot(history.history['acc'], label='train')
-        axs[1].plot(history.history['val_acc'], label='test')
-        axs[1].legend()
-        axs[1].set_title('Accuracy')
-        axs[1].set_ylabel('Accuracy')
-
-        pyplot.show()
+    pyplot.show()
 
 if __name__ == "__main__":
     main()
