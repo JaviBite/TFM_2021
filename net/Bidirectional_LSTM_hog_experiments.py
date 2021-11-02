@@ -109,7 +109,7 @@ def main():
     lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
     final_act = ['softmax'] * NUM_EXP
     hidden_act = ['sigmoid'] * NUM_EXP
-    dropouts = [[0.5,0.5,0.2],[0.5,0.3,0.2],[0,0.5,0.3]] * NUM_EXP // 2
+    dropouts = [[0.5,0.5,0.2],[0.5,0.3,0.2],[0,0.5,0.3]] * 2
     hidden_dense_untis = [32] * NUM_EXP
 
     optimizers = ['adam'] * NUM_EXP
@@ -155,6 +155,11 @@ def main():
 
         metrics = history.history
 
+        lr_list = []
+        for f in metrics['lr']:
+            lr_list.append(float(f))
+        metrics['lr'] = lr_list
+
         to_append = {'model': model, 'history': metrics, 'vis': to_vis}
 
         models_metrics.append(to_append)
@@ -163,7 +168,7 @@ def main():
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
-    json.dump(str(models_metrics), out_file, indent=1)
+    json.dump(models_metrics, out_file, indent=1)
 
     
     if False:

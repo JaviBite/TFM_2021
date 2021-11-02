@@ -159,52 +159,51 @@ def main():
     to_vis = ['rec_drop','dropouts']
 
     BATCH_SIZE = 10
+    i = 0
 
     models_metrics = []
 
     # Run the combinations
-    t = tqdm(total=NUM_EXP)
-    for i in range(NUM_EXP):
 
-        model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
-                                lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
-        opt = get(optimizers[i])
-        opt.learning_rate = lr[i]
-        model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
-        #print(model.summary())
+    model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
+                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
+    opt = get(optimizers[i])
+    opt.learning_rate = lr[i]
+    model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
+    #print(model.summary())
 
-        # Early Estopping
-        es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
-        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
-        history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                                callbacks=[es, reduce_lr], shuffle=True, verbose=1)
+    # Early Estopping
+    es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
+    reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
+    history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
+                            callbacks=[es, reduce_lr], shuffle=True, verbose=1)
 
 
-        model = {'lr': lr[i],
-                 'lstm_units': lstm_units[i],
-                 'rec_drop': rec_drop[i],
-                 'lstm_act': lstm_act[i],
-                 'lstm_rec_act': lstm_rec_act[i],
-                 'final_act': final_act[i],
-                 'hidden_act': hidden_act[i],
-                 'dropouts': dropouts[i],
-                 'hidden_dense_untis': hidden_dense_untis[i],
-                 'optimizers': optimizers[i],
-                 'losses': losses[i],
-                 'epochs': epochs[i]
-        }
+    model_json = {'lr': lr[i],
+                'lstm_units': lstm_units[i],
+                'rec_drop': rec_drop[i],
+                'lstm_act': lstm_act[i],
+                'lstm_rec_act': lstm_rec_act[i],
+                'final_act': final_act[i],
+                'hidden_act': hidden_act[i],
+                'dropouts': dropouts[i],
+                'hidden_dense_untis': hidden_dense_untis[i],
+                'optimizers': optimizers[i],
+                'losses': losses[i],
+                'epochs': epochs[i]
+    }
 
-        metrics = history.history
+    metrics = history.history
 
-        to_append = {'model': model, 'history': metrics, 'vis': to_vis}
-
-        models_metrics.append(to_append)
-
-        t.update()
+    lr_list = []
+    for f in metrics['lr']:
+        lr_list.append(float(f))
+    metrics['lr'] = lr_list
+    models_metrics = [{'model': model_json, 'history': metrics}]
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
-    json.dump(str(models_metrics), out_file, indent=1)
+    json.dump(models_metrics, out_file, indent=1)
 
     model.save('out_model.h5')
 

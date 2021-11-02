@@ -189,6 +189,11 @@ def main():
 
         metrics = history.history
 
+        lr_list = []
+        for f in metrics['lr']:
+            lr_list.append(float(f))
+        metrics['lr'] = lr_list
+
         to_append = {'model': model, 'history': metrics, 'vis': to_vis}
 
         models_metrics.append(to_append)
