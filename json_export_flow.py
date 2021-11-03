@@ -490,9 +490,7 @@ def main():
 
             init_frame = int(frag['time'][0] * fps)
             total_final_frame = int(frag['time'][1] * fps)
-            final_frame = total_final_frame
-
-            print("Framgnet_farme_count = ", total_final_frame-init_frame)                                                                                                                                                                                    
+            final_frame = total_final_frame                                                                                                                                                                                   
 
             if final_frame - init_frame < args.frames:
                 continue
