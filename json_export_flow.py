@@ -10,6 +10,8 @@ from tqdm import tqdm
 import traceback
 import logging
 
+from sklearn.model_selection import train_test_split
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -310,6 +312,7 @@ def main():
     parser.add_argument('-b',"--balance", action="store_true", help="Force balance between all the classes")
     parser.add_argument('-w',"--window", type=float, default=1.0, help="Percetnage of new data for the new window of fragment.")
     parser.add_argument('-jf',"--just_flow", action="store_true", help="Store flow instead of HOG")
+    parser.add_argument('-s',"--split", type=float, default=0.2, help="Split percentage for the dataset in Train and Test")
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -743,10 +746,18 @@ def main():
     y = np.array(y)
     X = np.array(X)
 
-    print(X.shape)
-    print(y.shape)
+    Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size=args.split, stratify=y)
 
-    np.savez(out_file + ".npz", a=X, b=y)
+    print("TRAIN: ")
+    print(Xtrain.shape)
+    print(ytrain.shape)
+
+    print("TEST: ")
+    print(Xtest.shape)
+    print(ytest.shape)
+
+    np.savez(out_file + "_train.npz", a=Xtrain, b=ytrain)
+    np.savez(out_file + "_test.npz", a=Xtest, b=ytest)
 
     print("Total classes count:", count_classes)
 
