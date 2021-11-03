@@ -7,6 +7,9 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+import traceback
+import logging
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -18,6 +21,23 @@ from cv_scripts.flow_hog import mi_gradiente
 from cv_scripts.libs import mi_hog
 
 import argparse
+
+def flow_2_frames(cap, init_frame, look_frame):
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, look_frame)
+
+    ret, frame1 = cap.read()
+    ret, frame2 = cap.read()
+
+    frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+    frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
+    flowFB = cv2.calcOpticalFlowFarneback(frame1, frame2, 
+                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame)
+
+    return flowFB
 
 def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
 
@@ -288,6 +308,8 @@ def main():
     parser.add_argument('-acc',"--flow_accomulate", type=int, default=FLOW_ACC, help="Flows to acommulate before HOG processing")
     parser.add_argument('-aug',"--augmentation", action="store_true", help="Add data augmentation flipping the frames")
     parser.add_argument('-b',"--balance", action="store_true", help="Force balance between all the classes")
+    parser.add_argument('-w',"--window", type=float, default=1.0, help="Percetnage of new data for the new window of fragment.")
+    parser.add_argument('-jf',"--just_flow", action="store_true", help="Store flow instead of HOG")
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -425,277 +447,300 @@ def main():
     X = []
     y = []
 
-    frag_i = -1
+    frag_i = 0
     while frag_i < len(fragments):
-        frag_i += 1
 
-        if args.balance:
-            
-            #Check the minimun class
-            min_class_id = np.argmin(count_classes[fragments_left])
-            if len(class_stacks[min_class_id]) > 0:
-                frag = class_stacks[min_class_id].pop()
-            else:
-                fragments_left[min_class_id] = False
-                disbalance_count = disbalance_count + 1
+        try:
 
-                if disbalance_count > 30:
+            if args.balance:
+                
+                #Check the minimun class
+                min_class_id = np.argmin(count_classes[fragments_left])
+                if len(class_stacks[min_class_id]) > 0:
+                    frag = class_stacks[min_class_id].pop()
+                else:
+                    fragments_left[min_class_id] = False
+                    disbalance_count = disbalance_count + 1
+
+                    frag_i -= 1
+                    continue
+                
+                if disbalance_count > 0:
+                    disbalance_count = disbalance_count + 1
+
+                if disbalance_count > 5:
                     print("Stopping to avoid disbalance over 30...")
                     break
-
-                frag_i -= 1
-                continue
-        else:
-            frag = fragments[frag_i]
-        
-        # Create a VideoCapture object and some useful data
-        videoPath = frag['vpath']
-        cap = cv2.VideoCapture(videoPath)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = frame_count/fps
-
-        width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
-        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
-
-        init_frame = int(frag['time'][0] * fps)
-        final_frame = int(frag['time'][1] * fps)
-        #frame_no = init_frame/frame_count
-
-        if final_frame - init_frame < args.frames:
-            continue
-
-        if final_frame > frame_count:
-            continue
-
-        action_noum = frag['act']
-
-        action = action_noum.split(" ")[0]
-
-        #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
-        #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
-        #The second argument defines the frame number in range 0.0-1.0
-        cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
-        
-        # Check if camera opened successfully
-        if (cap.isOpened()== False): 
-            print("Error opening video  file")
-            continue
-
-        roi_window = None
-
-        CTTE = 1 # Constat for CTTE * flow
-
-        flow_count = 0
-        last_gray_frames = [None, None]
-        last_gray_frames_flip = [None, None]
-
-        #Get first frame with considerable optical flow
-
-        not_flow = True
-        frame_i = init_frame
-
-        acc_flow = None
-        FRAMES_TO_SEARCH = 100
-        for fi in range(FRAMES_TO_SEARCH):
-            ret, frameflow1 = cap.read()
-            ret, frameflow2 = cap.read()
-
-            frameflow1 = cv2.cvtColor(frameflow1, cv2.COLOR_BGR2GRAY)
-            frameflow2 = cv2.cvtColor(frameflow2, cv2.COLOR_BGR2GRAY)
-
-            flowFB = cv2.calcOpticalFlowFarneback(frameflow1, frameflow2, 
-                                    None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
-
-            #Acc flow
-            if fi == 0:
-                acc_flow = flowFB
-            else:
-                acc_flow += flowFB
-
-            # Average flow
-
-            fx, fy = flowFB[:,0], flowFB[:,1] 
-            v = np.sqrt(fx * fx + fy * fy)
-            average = np.average(v[np.nonzero(v)])
-
-            #print("average flow:", average)
-
-            #cv2.imshow("FRAMES",frameflow1)
-            #cv2.waitKey(20)
-
-            if average > 0.01 and not_flow:
-                not_flow = False
-                init_frame = frame_i - 1
-                break                
-
-            frame_i = frame_i + 2
-
-        if not_flow:
-            continue
-        
-        #init_frame = frame_i - 2
-        final_frame = init_frame + args.frames
-
-        if final_frame - init_frame < args.frames:
-            continue
-
-        if final_frame > frame_count:
-            continue
-
-        
-
-        # Get roi
-        cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame - 50)
-        ret, frame = cap.read()
-        n_search_frames = 5
-        #roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
-        
-        roi = getROI3(cap, init_frame, coco_predictor, n_search_frames, args.padding, width, height, acc_flow, VIS)
-
-        if roi is not None:
-            x1, y1, x2, y2 = roi
-            roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
-        else:
-            print("No ROI")
-            continue
-
-        
-        sequence = []
-        sequence_aug = []
-        cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
-        last_gray_frames[1] = cv2.resize(frameflow1[tuple(roi_window)],(args.dimension,args.dimension))
-        last_gray_frames_flip[1] = cv2.resize(cv2.flip(frameflow1[tuple(roi_window)],1),(args.dimension,args.dimension))
-        bad_hog = 0
-        while(cap.isOpened()):
-            # Capture frame-by-frame
-            ret, frame = cap.read()
-
-            if frame_i <= final_frame and ret == True: 
-                
-                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(args.dimension,args.dimension))
-
-                # Update Last Frames
-                last_gray_frames[0] = last_gray_frames[1]
-                last_gray_frames[1] = roi_frame
             
-                #Calcular flujo optico
-                flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
-                                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+            else:
+                frag = fragments[frag_i]
+            
+            # Create a VideoCapture object and some useful data
+            videoPath = frag['vpath']
+            cap = cv2.VideoCapture(videoPath)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frame_count/fps
+
+            width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
+            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
+
+            init_frame = int(frag['time'][0] * fps)
+            total_final_frame = int(frag['time'][1] * fps)
+            final_frame = total_final_frame
+
+            print("Framgnet_farme_count = ", total_final_frame-init_frame)                                                                                                                                                                                    
+
+            if final_frame - init_frame < args.frames:
+                continue
+
+            if final_frame > frame_count:
+                continue
+
+            action_noum = frag['act']
+
+            action = action_noum.split(" ")[0]
+
+            #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
+            #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
+            #The second argument defines the frame number in range 0.0-1.0
+            cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
+            
+            # Check if camera opened successfully
+            if (cap.isOpened()== False): 
+                print("Error opening video  file")
+                continue
+
+            roi_window = None
+
+            CTTE = 1 # Constat for CTTE * flow
+
+            flow_count = 0
+            last_gray_frames = [None, None]
+            last_gray_frames_flip = [None, None]
+
+            #Get first frame with considerable optical flow
+
+            not_flow = True
+            frame_i = init_frame
+
+            acc_flow = None
+            FRAMES_TO_SEARCH = 100
+            for fi in range(FRAMES_TO_SEARCH):
+                ret, frameflow1 = cap.read()
+                ret, frameflow2 = cap.read()
+
+                frameflow1 = cv2.cvtColor(frameflow1, cv2.COLOR_BGR2GRAY)
+                frameflow2 = cv2.cvtColor(frameflow2, cv2.COLOR_BGR2GRAY)
+
+                flowFB = cv2.calcOpticalFlowFarneback(frameflow1, frameflow2, 
+                                        None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
+                #Acc flow
+                if fi == 0:
+                    acc_flow = flowFB
+                else:
+                    acc_flow += flowFB
+
+                # Average flow
+
+                fx, fy = flowFB[:,0], flowFB[:,1] 
+                v = np.sqrt(fx * fx + fy * fy)
+                average = np.average(v[np.nonzero(v)])
+
+                #print("average flow:", average)
+
+                #cv2.imshow("FRAMES",frameflow1)
+                #cv2.waitKey(20)
+
+                if average > 0.01 and not_flow:
+                    not_flow = False
+                    init_frame = frame_i - 1
+                    break                
+
+                frame_i = frame_i + 2
+
+            if not_flow:
+                continue
+            
+            #init_frame = frame_i - 2
+            final_frame = init_frame + args.frames
+
+            if final_frame - init_frame < args.frames:
+                continue
+
+            if final_frame > frame_count:
+                continue
+
+            
+
+            # Get roi
+            cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame - 50)
+            ret, frame = cap.read()
+            n_search_frames = 5
+            #roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
+            
+            flow_for_roi = flow_2_frames(cap, init_frame - 50, final_frame-(args.frames//2))
+            roi = getROI3(cap, init_frame, coco_predictor, n_search_frames, args.padding, width, height, flow_for_roi, VIS)
+
+            if roi is not None:
+                x1, y1, x2, y2 = roi
+                roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
+            else:
+                print("No ROI")
+                continue
+
+            while (cap.isOpened() and total_final_frame - init_frame >= args.frames + 1):
+
+                cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
+                ret, frame = cap.read()
+                frameflow1 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                #Initial flow
+                
+                last_gray_frames[1] = cv2.resize(frameflow1[tuple(roi_window)],(args.dimension,args.dimension))
+                last_gray_frames_flip[1] = cv2.resize(cv2.flip(frameflow1[tuple(roi_window)],1),(args.dimension,args.dimension))
+            
+                sequence = []
+                sequence_aug = []
+                bad_hog = 0
+                while(cap.isOpened()):
+                    # Capture frame-by-frame
+                    ret, frame = cap.read()
+
+                    if frame_i <= final_frame and ret == True: 
+                        
+                        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(args.dimension,args.dimension))
+
+                        # Update Last Frames
+                        last_gray_frames[0] = last_gray_frames[1]
+                        last_gray_frames[1] = roi_frame
+                    
+                        #Calcular flujo optico
+                        flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
+                                        None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
+                        if DATA_AUGMENTATION:
+                            roi_flip_frame = cv2.flip(roi_frame, 1)
+                            last_gray_frames_flip[0] = last_gray_frames_flip[1]
+                            last_gray_frames_flip[1] = roi_flip_frame
+                            flowFB_flip = cv2.calcOpticalFlowFarneback(last_gray_frames_flip[0], last_gray_frames_flip[1], 
+                                        None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+
+                        # Visualization
+                        if VIS:
+                            img_roi = frame[tuple(roi_window)]
+                            img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
+                            cv2.imshow("ROI", img_roi)
+                            cv2.imshow("Image", frame)
+                            cv2.waitKey(100)
+
+                        #Acomular y hacer histograma
+                            
+                        if flow_count == 0:
+                            flow = CTTE * flowFB
+                            if DATA_AUGMENTATION:
+                                flow_flip = CTTE * flowFB_flip
+
+                        else:
+                            flow += CTTE * flowFB
+                            if DATA_AUGMENTATION:
+                                flow_flip += CTTE * flowFB_flip
+                        
+                        flow_count = flow_count + 1
+                                
+                        if flow_count >= FLOW_ACC:
+                            flow_count = 0
+
+                            roi_flow = flow
+                            modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+
+                            orientations = 9
+                            pixels_per_cell = (16, 16)
+
+                            normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
+                                                                    cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+
+                            # Visualization
+                            if VIS:
+                                hog_image = normalized_blocks[1]
+                                hog_image = np.uint8(hog_image)
+                                hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
+                                cv2.imshow('hog', hog_image)
+                                normalized_blocks = normalized_blocks[0]
+
+                            #fx, fy = roi_flow[:,0], roi_flow[:,1] 
+                            #v = np.sqrt(fx * fx + fy * fy)
+                            all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
+                            count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
+
+                            #print("Count flow_roi: ", count_flow)
+                            if count_flow <= 0.05:
+                                bad_hog = bad_hog + 1
+                                if bad_hog > 3:
+                                    print("No flow, skipping")
+                                    break
+
+                            #Add hog features to sequence
+                            #print("Len Hog: ",len(normalized_blocks))
+                            sequence.append(normalized_blocks)  
+
+                            if DATA_AUGMENTATION:
+                                roi_flow = flow_flip
+                                modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+                                normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+                                                                        cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+                                sequence_aug.append(normalized_blocks)  
+
+                        frame_i =  frame_i + 1
+                    
+                    # Break the loop
+                    else: 
+                        init_frame = final_frame
+                        frame_i = init_frame
+                        final_frame = final_frame + args.frames
+                        break
+
+                # End semi-framgnet processing
+                if len(sequence) != int(args.frames/FLOW_ACC):
+                    continue
+                
+                #print("len seq: ", len(sequence))
+                #Sequence and action
+                class_id = int(frag['class'])
+                count_classes[class_id] += 1
+
+                y.append(class_id)
+                X.append(np.array(sequence))
 
                 if DATA_AUGMENTATION:
-                    roi_flip_frame = cv2.flip(roi_frame, 1)
-                    last_gray_frames_flip[0] = last_gray_frames_flip[1]
-                    last_gray_frames_flip[1] = roi_flip_frame
-                    flowFB_flip = cv2.calcOpticalFlowFarneback(last_gray_frames_flip[0], last_gray_frames_flip[1], 
-                                None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+                    y.append(class_id)
+                    X.append(np.array(sequence_aug))
 
-                # Visualization
-                if VIS:
-                    img_roi = frame[tuple(roi_window)]
-                    img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
-                    cv2.imshow("ROI", img_roi)
-                    cv2.imshow("Image", frame)
-                    cv2.waitKey(100)
+                frag_count = frag_count + 1
+                t.update()
 
-                #Acomular y hacer histograma
-                    
-                if flow_count == 0:
-                    flow = CTTE * flowFB
-                    if DATA_AUGMENTATION:
-                        flow_flip = CTTE * flowFB_flip
+                if max_out_frags is not None and frag_count >= max_out_frags:
+                    break
 
-                else:
-                    flow += CTTE * flowFB
-                    if DATA_AUGMENTATION:
-                        flow_flip += CTTE * flowFB_flip
-                
-                flow_count = flow_count + 1
-                        
-                if flow_count >= FLOW_ACC:
-                    flow_count = 0
-
-                    roi_flow = flow
-                    modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-
-                    orientations = 9
-                    pixels_per_cell = (16, 16)
-
-                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
-                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
-
-                    # Visualization
-                    if VIS:
-                        hog_image = normalized_blocks[1]
-                        hog_image = np.uint8(hog_image)
-                        hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
-                        cv2.imshow('hog', hog_image)
-                        normalized_blocks = normalized_blocks[0]
-
-                    #fx, fy = roi_flow[:,0], roi_flow[:,1] 
-                    #v = np.sqrt(fx * fx + fy * fy)
-                    all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
-                    count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
-
-                    #print("Count flow_roi: ", count_flow)
-                    if count_flow <= 0.05:
-                        bad_hog = bad_hog + 1
-                        if bad_hog > 3:
-                            print("No flow, skipping")
-                            break
-
-                    #Add hog features to sequence
-                    #print("Len Hog: ",len(normalized_blocks))
-                    sequence.append(normalized_blocks)  
-
-                    if DATA_AUGMENTATION:
-                        roi_flow = flow_flip
-                        modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-                        normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
-                                                                cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
-                        sequence_aug.append(normalized_blocks)  
-
-                frame_i =  frame_i + 1
+            cv2.destroyAllWindows()
+            cap.release()
             
-            # Break the loop
-            else: 
-                break
+            frag_i += 1
 
-        cv2.destroyAllWindows()
-
-        # End framgnet processing
-
-        if len(sequence) != int(args.frames/FLOW_ACC):
-            continue
+            if max_out_frags is not None and frag_count >= max_out_frags:
+                    break
         
-        #print("len seq: ", len(sequence))
-        #Sequence and action
-        class_id = int(frag['class'])
-        count_classes[class_id] += 1
-
-        y.append(class_id)
-        X.append(np.array(sequence))
-
-        if DATA_AUGMENTATION:
-            y.append(class_id)
-            X.append(np.array(sequence_aug))
-
-        #print("Len X: ", len(X))
-
-        cap.release()
-        frag_count = frag_count + 1
-        t.update()
-
-        if max_out_frags is not None and frag_count >= max_out_frags:
-            break
+        except Exception as e:
+            logging.error(traceback.format_exc())
+            print("Continuing...")
+            continue
 
 
-    # Write File
-    #X = X.reshape(total_fragments, 9*16*16*3*3, 1)
+    # Export final dataset file
 
     y = np.array(y)
-
     X = np.array(X)
 
     print(X.shape)
