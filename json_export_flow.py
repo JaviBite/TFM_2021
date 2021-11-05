@@ -453,10 +453,12 @@ def main():
     y = []
 
     frag_i = 0
+    # LOOP AROUND FRAGMENTS
     while frag_i < len(fragments):
 
         try:
-
+            
+            # Select fragment (sequential or from stack if balance)
             if args.balance:
                 
                 #Check the minimun class
@@ -494,22 +496,17 @@ def main():
             total_final_frame = int(frag['time'][1] * fps)
             final_frame = total_final_frame                                                                                                                                                                                   
 
+            # Discard the video if its too short
             if final_frame - init_frame < args.frames:
                 frag_i += 1
                 continue
-
-            if final_frame > frame_count:
-                frag_i += 1
-                continue
-
+            
+            # Some label data
             action_noum = frag['act']
-
             action = action_noum.split(" ")[0]
 
-            #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
-            #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
-            #The second argument defines the frame number in range 0.0-1.0
-            cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
+            # Set the initial frame
+            cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame)
             
             # Check if camera opened successfully
             if (cap.isOpened()== False): 
@@ -518,7 +515,6 @@ def main():
                 continue
 
             roi_window = None
-
             CTTE = 1 # Constat for CTTE * flow
 
             flow_count = 0
@@ -526,7 +522,6 @@ def main():
             last_gray_frames_flip = [None, None]
 
             #Get first frame with considerable optical flow
-
             not_flow = True
             frame_i = init_frame
 
@@ -561,7 +556,7 @@ def main():
 
                 if average > 0.01 and not_flow:
                     not_flow = False
-                    init_frame = frame_i - 1
+                    init_frame = frame_i
                     break                
 
                 frame_i = frame_i + 2
@@ -601,6 +596,7 @@ def main():
                 continue
             
             bad = False
+            # LOOP AROUND SLICES OF THE FRAGMENT
             while (cap.isOpened() and total_final_frame - init_frame >= args.frames + 1 and not bad):
 
                 cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
@@ -615,6 +611,8 @@ def main():
                 sequence = []
                 sequence_aug = []
                 bad_hog = 0
+
+                # GET FRAMES
                 while(cap.isOpened()):
                     # Capture frame-by-frame
                     ret, frame = cap.read()
@@ -732,19 +730,19 @@ def main():
                     else: 
                         init_frame = final_frame
                         frame_i = init_frame
-                        final_frame = final_frame + args.frames
+                        final_frame = init_frame + args.frames
                         break
 
                 # End semi-framgnet processing
-                if not DO_JUST_FLOW and len(sequence) > int(args.frames/FLOW_ACC):
+                #print("len seq: ", len(sequence))
+                if not DO_JUST_FLOW and len(sequence) >= int(args.frames/FLOW_ACC):
                     sequence = sequence[:int(args.frames/FLOW_ACC)]
-                elif DO_JUST_FLOW and len(sequence) > args.frames:
+                elif DO_JUST_FLOW and len(sequence) >= args.frames:
                     sequence = sequence[:args.frames]
                 else:
                     frag_i += 1
                     continue
                 
-                #print("len seq: ", len(sequence))
                 #Sequence and action
                 class_id = int(frag['class'])
                 count_classes[class_id] += 1
