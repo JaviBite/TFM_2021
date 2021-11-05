@@ -694,13 +694,15 @@ def main():
 
                                 #Add hog features to sequence
                                 #print("Len Hog: ",len(normalized_blocks))
+                                #print("hog shape: ", normalized_blocks.shape)
                                 sequence.append(normalized_blocks)  
 
                                 if DATA_AUGMENTATION:
                                     roi_flow = flow_flip
                                     modulo, argumento, argumento2 = mi_gradiente(roi_flow)
                                     normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
-                                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+                                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=False)
+                                    
                                     sequence_aug.append(normalized_blocks)  
                         
                         # Put the flow into the sequence
@@ -737,12 +739,17 @@ def main():
                 #print("len seq: ", len(sequence))
                 if not DO_JUST_FLOW and len(sequence) >= int(args.frames/FLOW_ACC):
                     sequence = sequence[:int(args.frames/FLOW_ACC)]
+                    if DATA_AUGMENTATION:
+                        sequence_aug = sequence_aug[:int(args.frames/FLOW_ACC)]
                 elif DO_JUST_FLOW and len(sequence) >= args.frames:
                     sequence = sequence[:args.frames]
+                    if DATA_AUGMENTATION:
+                        sequence_aug = sequence_aug[:args.frames]
                 else:
                     frag_i += 1
                     continue
-                
+
+                #print("len seq: ", len(sequence))
                 #Sequence and action
                 class_id = int(frag['class'])
                 count_classes[class_id] += 1
