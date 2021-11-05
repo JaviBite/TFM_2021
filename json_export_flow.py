@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 
 from cv_scripts.pot_det import detect_pots
 from cv_scripts.pot_det_cv import detect_pots_cv, encuentra_box, iou
-from cv_scripts.flow_hog import mi_gradiente
+from cv_scripts.flow_hog import mi_gradiente, draw_hsv
 from cv_scripts.libs import mi_hog
 
 import argparse
@@ -324,6 +324,8 @@ def main():
 
     FLOW_ACC = args.flow_accomulate
     DATA_AUGMENTATION = args.augmentation
+
+    DO_JUST_FLOW = args.just_flow
     
     file1 = args.json_dir
 
@@ -493,9 +495,11 @@ def main():
             final_frame = total_final_frame                                                                                                                                                                                   
 
             if final_frame - init_frame < args.frames:
+                frag_i += 1
                 continue
 
             if final_frame > frame_count:
+                frag_i += 1
                 continue
 
             action_noum = frag['act']
@@ -510,6 +514,7 @@ def main():
             # Check if camera opened successfully
             if (cap.isOpened()== False): 
                 print("Error opening video  file")
+                frag_i += 1
                 continue
 
             roi_window = None
@@ -526,7 +531,7 @@ def main():
             frame_i = init_frame
 
             acc_flow = None
-            FRAMES_TO_SEARCH = 100
+            FRAMES_TO_SEARCH = args.frames//2
             for fi in range(FRAMES_TO_SEARCH):
                 ret, frameflow1 = cap.read()
                 ret, frameflow2 = cap.read()
@@ -562,15 +567,18 @@ def main():
                 frame_i = frame_i + 2
 
             if not_flow:
+                frag_i += 1
                 continue
             
             #init_frame = frame_i - 2
             final_frame = init_frame + args.frames
 
             if final_frame - init_frame < args.frames:
+                frag_i += 1
                 continue
 
             if final_frame > frame_count:
+                frag_i += 1
                 continue
 
             
@@ -589,9 +597,11 @@ def main():
                 roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
             else:
                 print("No ROI")
+                frag_i += 1
                 continue
-
-            while (cap.isOpened() and total_final_frame - init_frame >= args.frames + 1):
+            
+            bad = False
+            while (cap.isOpened() and total_final_frame - init_frame >= args.frames + 1 and not bad):
 
                 cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
                 ret, frame = cap.read()
@@ -638,61 +648,83 @@ def main():
                             cv2.waitKey(100)
 
                         #Acomular y hacer histograma
+                        if not DO_JUST_FLOW:
+                            if flow_count == 0:
+                                flow = CTTE * flowFB
+                                if DATA_AUGMENTATION:
+                                    flow_flip = CTTE * flowFB_flip
+
+                            else:
+                                flow += CTTE * flowFB
+                                if DATA_AUGMENTATION:
+                                    flow_flip += CTTE * flowFB_flip
                             
-                        if flow_count == 0:
-                            flow = CTTE * flowFB
-                            if DATA_AUGMENTATION:
-                                flow_flip = CTTE * flowFB_flip
+                            flow_count = flow_count + 1
+                                    
+                            if flow_count >= FLOW_ACC:
+                                flow_count = 0
 
-                        else:
-                            flow += CTTE * flowFB
-                            if DATA_AUGMENTATION:
-                                flow_flip += CTTE * flowFB_flip
+                                roi_flow = flow
+                                modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+
+                                orientations = 9
+                                pixels_per_cell = (16, 16)
+
+                                normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
+                                                                        cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+
+                                # Visualization
+                                if VIS:
+                                    hog_image = normalized_blocks[1]
+                                    hog_image = np.uint8(hog_image)
+                                    hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
+                                    cv2.imshow('hog', hog_image)
+                                    normalized_blocks = normalized_blocks[0]
+
+                                #fx, fy = roi_flow[:,0], roi_flow[:,1] 
+                                #v = np.sqrt(fx * fx + fy * fy)
+                                all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
+                                count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
+
+                                #print("Count flow_roi: ", count_flow)
+                                if count_flow <= 0.05:
+                                    bad_hog = bad_hog + 1
+                                    if bad_hog > 3:
+                                        print("No flow, skipping")
+                                        bad = True
+                                        break
+
+                                #Add hog features to sequence
+                                #print("Len Hog: ",len(normalized_blocks))
+                                sequence.append(normalized_blocks)  
+
+                                if DATA_AUGMENTATION:
+                                    roi_flow = flow_flip
+                                    modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+                                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+                                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+                                    sequence_aug.append(normalized_blocks)  
                         
-                        flow_count = flow_count + 1
-                                
-                        if flow_count >= FLOW_ACC:
-                            flow_count = 0
-
-                            roi_flow = flow
-                            modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-
-                            orientations = 9
-                            pixels_per_cell = (16, 16)
-
-                            normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
-                                                                    cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
-
-                            # Visualization
-                            if VIS:
-                                hog_image = normalized_blocks[1]
-                                hog_image = np.uint8(hog_image)
-                                hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
-                                cv2.imshow('hog', hog_image)
-                                normalized_blocks = normalized_blocks[0]
-
-                            #fx, fy = roi_flow[:,0], roi_flow[:,1] 
-                            #v = np.sqrt(fx * fx + fy * fy)
-                            all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
-                            count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
-
-                            #print("Count flow_roi: ", count_flow)
+                        # Put the flow into the sequence
+                        else:
+                            
+                            count_flow = np.sum([flowFB > 0.5]) / (flowFB.shape[0] * flowFB.shape[1])
+                            #print(count_flow)
                             if count_flow <= 0.05:
                                 bad_hog = bad_hog + 1
-                                if bad_hog > 3:
+                                if bad_hog > 5:
                                     print("No flow, skipping")
+                                    bad = True
                                     break
 
-                            #Add hog features to sequence
-                            #print("Len Hog: ",len(normalized_blocks))
-                            sequence.append(normalized_blocks)  
+                            if VIS:
+                                _,  flow_HSV2 = draw_hsv(flowFB)
+                                cv2.imshow('flow', flow_HSV2)  
+                            
+                            sequence.append(flowFB) 
 
                             if DATA_AUGMENTATION:
-                                roi_flow = flow_flip
-                                modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-                                normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
-                                                                        cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
-                                sequence_aug.append(normalized_blocks)  
+                                sequence.append(flowFB_flip) 
 
                         frame_i =  frame_i + 1
                     
@@ -704,7 +736,12 @@ def main():
                         break
 
                 # End semi-framgnet processing
-                if len(sequence) != int(args.frames/FLOW_ACC):
+                if not DO_JUST_FLOW and len(sequence) > int(args.frames/FLOW_ACC):
+                    sequence = sequence[:int(args.frames/FLOW_ACC)]
+                elif DO_JUST_FLOW and len(sequence) > args.frames:
+                    sequence = sequence[:args.frames]
+                else:
+                    frag_i += 1
                     continue
                 
                 #print("len seq: ", len(sequence))
@@ -736,6 +773,7 @@ def main():
         except Exception as e:
             logging.error(traceback.format_exc())
             print("Continuing...")
+            frag_i += 1
             continue
 
 
