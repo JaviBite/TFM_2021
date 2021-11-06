@@ -6,7 +6,7 @@ Created on Mon Feb 24 09:34:36 2020
 """
 import sys
 from random import random
-import json
+import json, time
 
 from numpy import array
 from numpy import cumsum
@@ -136,8 +136,15 @@ def main():
         # Early Estopping
         es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
         reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
+
+        start = time.time()
         history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
                                 callbacks=[es, reduce_lr], shuffle=True, verbose=0)
+
+        end = time.time()
+        hours, rem = divmod(end-start, 3600)
+        minutes, seconds = divmod(rem, 60)
+        elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
 
         model = {'lr': lr[i],
                  'lstm_units': lstm_units[i],
@@ -160,7 +167,7 @@ def main():
             lr_list.append(float(f))
         metrics['lr'] = lr_list
 
-        to_append = {'model': model, 'history': metrics, 'vis': to_vis}
+        to_append = {'model': model, 'history': metrics, 'vis': to_vis, 'etime': elapsed_time}
 
         models_metrics.append(to_append)
 

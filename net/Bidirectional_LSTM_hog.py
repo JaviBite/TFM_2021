@@ -6,7 +6,7 @@ Created on Mon Feb 24 09:34:36 2020
 """
 import sys
 from random import random
-import json
+import json, time
 
 from numpy import array
 from numpy import cumsum
@@ -51,7 +51,10 @@ def main():
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
 
-    metadata_file = file1.rsplit('.',maxsplit=1)[0] + "_metadata.json"
+    if '_train' in file1:
+        metadata_file = file1.rsplit('.',maxsplit=1)[0][:-6] + "_metadata.json"
+    else:
+        metadata_file = file1.rsplit('.',maxsplit=1)[0] + "_metadata.json"
     metadata_in = open(metadata_file,)
     metadata = json.load(metadata_in)
 
@@ -133,8 +136,16 @@ def main():
     # Early Estopping
     es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
     reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
+
+    start = time.time()
     history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
                             callbacks=[es, reduce_lr], shuffle=True, verbose=1)
+    end = time.time()
+    hours, rem = divmod(end-start, 3600)
+    minutes, seconds = divmod(rem, 60)
+    elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
+
+    print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
 
     model_json = {'lr': lr[i],
                 'lstm_units': lstm_units[i],
@@ -156,7 +167,7 @@ def main():
     for f in metrics['lr']:
         lr_list.append(float(f))
     metrics['lr'] = lr_list
-    models_metrics = [{'model': model_json, 'history': metrics}]
+    models_metrics = [{'model': model_json, 'history': metrics, 'etime': elapsed_time}]
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
