@@ -21,7 +21,9 @@ from cv_scripts.libs.mi_hog import normalize
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
+import keras
 from keras.models import Sequential
+from keras import layers
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import TimeDistributed
@@ -34,14 +36,43 @@ from matplotlib import pyplot
 
 def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis):
 
-    model = Sequential()
-    model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
-    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout)))
-    model.add(Dropout(dropouts[1]))
-    #model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation = hidden_act))
-    model.add(Dropout(dropouts[2]))
-    model.add(Dense(num_classes, activation = final_act))
+    inp = layers.Input(shape=input_shape)
+
+    x = layers.Dropout(dropouts[0])(inp)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(5, 5),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(3, 3),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(1, 1),
+        padding="same",
+        #return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = Flatten()(x)
+
+    x = layers.Dropout(dropouts[1])(x)
+    x = layers.Dense(hidden_dense_untis, activation= hidden_act)(x)
+    x = layers.Dropout(dropouts[2])(x)
+    x = layers.Dense(num_classes, activation= final_act)(x)
+
+    # Next, we will build the complete model and compile it.
+    model = keras.models.Model(inp, x)
 
     return model
 
@@ -50,6 +81,14 @@ def main():
     file1 = sys.argv[1]
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
+
+    N_CLASSES = np.max(labels) + 1
+    N_SAMPLES = X.shape[0]
+    N_TIMESTEPS = X.shape[1]
+
+    HOG_H = X.shape[2]
+    HOG_W = X.shape[3]
+    ORIENTATIONS = X.shape[4]
 
     if '_train' in file1:
         metadata_file = file1.rsplit('.',maxsplit=1)[0][:-6] + "_metadata.json"
@@ -60,21 +99,13 @@ def main():
 
     class_labels = metadata['classes']
 
-    N_CLASSES = np.max(labels) + 1
-    N_SAMPLES = X.shape[0]
-    N_TIMESTEPS = X.shape[1]
-
-    HOG_H = X.shape[2]
-    HOG_W = X.shape[3]
-    ORIENTATIONS = X.shape[4]
-
     # Normalice
     X_norm = []
     for row in range(N_SAMPLES):
         add_samples = []
         for sample in range(N_TIMESTEPS):
             ortientation_hist = X[row,sample,:,:,:]
-            normalized_hist = normalize(ortientation_hist)
+            normalized_hist = ortientation_hist / np.max(ortientation_hist)
             add_samples.append(normalized_hist)
         X_norm.append(np.array(add_samples))
 
@@ -103,28 +134,39 @@ def main():
     trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
 
     # define problem
-    n_timesteps =  X.shape[1]
     n_sequences =  X.shape[0]
-    n_features = X.shape[2]
+    n_timesteps =  X.shape[1]
+    width = X.shape[2]
+    height = X.shape[3]
+    channels = X.shape[4]
 
-    INPUT_SHAPE = (n_timesteps, n_features)
+    INPUT_SHAPE = (n_timesteps, width, height, channels)
 
-    lr = [0.001]
-    lstm_units = [32]
-    rec_drop = [0.2]
-    lstm_act = ['tanh']
-    lstm_rec_act = ['hard_sigmoid']
-    final_act = ['softmax']
-    hidden_act = ['sigmoid']
-    dropouts = [[0.3,0.2,0.1]]
-    hidden_dense_untis = [16]
+    # do experiments
+    NUM_EXP = 1
 
-    optimizers = ['adam']
-    losses = ['categorical_crossentropy']
-    epochs = [30]
+    lr = [0.001] * NUM_EXP
+    lstm_units = [32] * NUM_EXP
+    rec_drop = [0.2, 0.4, 0.5] * 2
+    lstm_act = ['relu'] * NUM_EXP
+    lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
+    final_act = ['softmax'] * NUM_EXP
+    hidden_act = ['sigmoid'] * NUM_EXP
+    dropouts = [[0.5,0.3,0.2]] * NUM_EXP
+    hidden_dense_untis = [32] * NUM_EXP
+
+    optimizers = ['adam'] * NUM_EXP
+    losses = ['categorical_crossentropy'] * NUM_EXP
+    epochs = [50] * NUM_EXP
+
+    to_vis = ['rec_drop','dropouts']
 
     BATCH_SIZE = 10
     i = 0
+
+    models_metrics = []
+
+    # Run the combinations
 
     model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
                             lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
@@ -140,12 +182,14 @@ def main():
     start = time.time()
     history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
                             callbacks=[es, reduce_lr], shuffle=True, verbose=1)
+
     end = time.time()
     hours, rem = divmod(end-start, 3600)
     minutes, seconds = divmod(rem, 60)
     elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
 
     print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+
 
     model_json = {'lr': lr[i],
                 'lstm_units': lstm_units[i],

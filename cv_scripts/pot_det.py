@@ -69,7 +69,9 @@ def trackeable(class_id, box=None):
         boxnp = detBox_to_Box(box)
 
         areaok = box.area() > (150 * 150)
-        boxok = (boxnp[2] - boxnp[3]) < 100     
+        min_box = min(boxnp[2],boxnp[3])
+        max_box = max(boxnp[2],boxnp[3])
+        boxok = min_box/max_box > 0.8    
 
     return classok and boxok and areaok
 
