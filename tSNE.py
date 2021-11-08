@@ -9,12 +9,15 @@ import sys
 
 
 def main():
+    
     file1 = sys.argv[1]
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
+    X.reshape(X.shape[0],1,15,15,9)
+    print(labels)
     y = np.array(labels)
 
-    metadata = ['poner','remover','voltear']
+    metadata = ['remover','poner']
 
     N_CLASSES = np.max(labels) + 1
     N_SAMPLES = X.shape[0]
@@ -23,7 +26,9 @@ def main():
     HOG_H = X.shape[2]
     HOG_W = X.shape[3]
     ORIENTATIONS = X.shape[4]
-
+    
+    PERPLEXITY = 50
+    
     if N_TIMESTEPS == 1:
         X = X.reshape(N_SAMPLES,HOG_H*HOG_W*ORIENTATIONS)
     else:
@@ -61,7 +66,7 @@ def main():
         ############################################################
         # Fit and transform with a TSNE
         
-        tsne = TSNE(n_components=2, random_state=0)
+        tsne = TSNE(n_components=2, random_state=0, perplexity=PERPLEXITY)
         # Just 2 components in order show to a 2D plot
 
         ############################################################
@@ -85,7 +90,7 @@ def main():
         ############################################################
         # Fit and transform with a TSNE
         
-        tsne = TSNE(n_components=3, random_state=0)
+        tsne = TSNE(n_components=3, random_state=0, perplexity=PERPLEXITY)
         # Just 2 components in order show to a 2D plot
 
         ############################################################
@@ -95,7 +100,7 @@ def main():
 
         ############################################################
         # Visualize the data
-        target_names = ['poner','remover','voltear']
+        target_names = ['remover','poner','tapar','voltear']
         target_ids = range(len(target_names))
         
         fig = plt.figure()
