@@ -20,7 +20,9 @@ from cv_scripts.libs.mi_hog import normalize
 
 from sklearn.model_selection import train_test_split
 
+import keras
 from keras.models import Sequential
+from keras import layers
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import TimeDistributed
@@ -33,14 +35,43 @@ from matplotlib import pyplot
 
 def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis):
 
-    model = Sequential()
-    model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
-    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout)))
-    model.add(Dropout(dropouts[1]))
-    #model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation = hidden_act))
-    model.add(Dropout(dropouts[2]))
-    model.add(Dense(num_classes, activation = final_act))
+    inp = layers.Input(shape=input_shape)
+
+    x = layers.Dropout(dropouts[0])(inp)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(5, 5),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(3, 3),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(1, 1),
+        padding="same",
+        #return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = Flatten()(x)
+
+    x = layers.Dropout(dropouts[1])(x)
+    x = layers.Dense(hidden_dense_untis, activation= hidden_act)(x)
+    x = layers.Dropout(dropouts[2])(x)
+    x = layers.Dense(num_classes, activation= final_act)(x)
+
+    # Next, we will build the complete model and compile it.
+    model = keras.models.Model(inp, x)
 
     return model
 
@@ -64,7 +95,7 @@ def main():
         add_samples = []
         for sample in range(N_TIMESTEPS):
             ortientation_hist = X[row,sample,:,:,:]
-            normalized_hist = normalize(ortientation_hist)
+            normalized_hist = ortientation_hist / np.max(ortientation_hist)
             add_samples.append(normalized_hist)
         X_norm.append(np.array(add_samples))
 
@@ -93,23 +124,25 @@ def main():
     trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
 
     # define problem
-    n_timesteps =  X.shape[1]
     n_sequences =  X.shape[0]
-    n_features = X.shape[2]
+    n_timesteps =  X.shape[1]
+    width = X.shape[2]
+    height = X.shape[3]
+    channels = X.shape[4]
 
-    INPUT_SHAPE = (n_timesteps, n_features)
+    INPUT_SHAPE = (n_timesteps, width, height, channels)
 
     # do experiments
-    NUM_EXP = 6
+    NUM_EXP = 1
 
     lr = [0.001] * NUM_EXP
     lstm_units = [32] * NUM_EXP
     rec_drop = [0.2, 0.4, 0.5] * 2
-    lstm_act = ['tanh'] * NUM_EXP
+    lstm_act = ['relu'] * NUM_EXP
     lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
     final_act = ['softmax'] * NUM_EXP
     hidden_act = ['sigmoid'] * NUM_EXP
-    dropouts = [[0.5,0.5,0.2],[0.5,0.3,0.2],[0,0.5,0.3]] * 2
+    dropouts = [[0.5,0.3,0.2]] * NUM_EXP
     hidden_dense_untis = [32] * NUM_EXP
 
     optimizers = ['adam'] * NUM_EXP
@@ -140,11 +173,11 @@ def main():
         start = time.time()
         history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
                                 callbacks=[es, reduce_lr], shuffle=True, verbose=0)
-
         end = time.time()
         hours, rem = divmod(end-start, 3600)
         minutes, seconds = divmod(rem, 60)
         elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
+
 
         model = {'lr': lr[i],
                  'lstm_units': lstm_units[i],
@@ -175,7 +208,7 @@ def main():
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
-    json.dump(models_metrics, out_file, indent=1)
+    json.dump(str(models_metrics), out_file, indent=1)
 
     
     if False:

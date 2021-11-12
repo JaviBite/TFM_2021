@@ -42,10 +42,17 @@ def main():
         color = cmap(indx/10)
         color2 = cmap(indx/10 + 1/20)
 
-        lr = experiment['model']['lr']
-        opt = experiment['model']['optimizers']
+        if 'vis' in experiment:
+            label = ''
 
-        label = str(opt) + "lr=" + str(lr)
+            for tag in experiment['vis']:
+                label += tag + "=" + str(experiment['model'][tag]) + " "
+
+        else:
+            lr = experiment['model']['lr']
+            opt = experiment['model']['optimizers']
+
+            label = str(opt) + "lr=" + str(lr)
 
         history = experiment['history']
 
