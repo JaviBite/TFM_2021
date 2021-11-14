@@ -142,12 +142,12 @@ def main():
     lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
     final_act = ['softmax'] * NUM_EXP
     hidden_act = ['sigmoid'] * NUM_EXP
-    dropouts = [[0.5,0.3,0.2]] * NUM_EXP
+    dropouts = [[0.5,0.5,0.3]] * NUM_EXP
     hidden_dense_untis = [32] * NUM_EXP
 
     optimizers = ['adam'] * NUM_EXP
     losses = ['categorical_crossentropy'] * NUM_EXP
-    epochs = [30] * NUM_EXP
+    epochs = [50] * NUM_EXP
 
     to_vis = ['rec_drop','dropouts']
 
@@ -207,8 +207,8 @@ def main():
         t.update()
 
     # dumps results
-    out_file = open("out_model_metrics.json", "w")
-    json.dump(str(models_metrics), out_file, indent=1)
+    out_file = open("out_convmodel_metrics.json", "w")
+    json.dump(models_metrics, out_file, indent=1)
 
     
     if False:
