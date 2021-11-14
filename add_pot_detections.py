@@ -259,8 +259,8 @@ def main():
     print("\n")
 
     # Default replace dir
-    for i in ["1","2","3","4"]:
-        data_ours['config']['file']['loc_prefix'][i] = "file:///E:/tfm/actions/videos" #"file:///%DIR_TO_VIDEOS%"  #TODO
+    #for i in ["1","2","3","4"]:
+    #    data_ours['config']['file']['loc_prefix'][i] = "file:///E:/tfm/actions/videos" #"file:///%DIR_TO_VIDEOS%"  #TODO
     
     # Add the new atributte
     attribute = {"aname":"pot","anchor_id":"FILE1_Z1_XY1","type":3,"desc":"Recipiente","options":{"0":"sarten","1":"cacerola"},"default_option_id":"0"}
