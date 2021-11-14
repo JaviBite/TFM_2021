@@ -276,6 +276,7 @@ def main():
             out.close()
 
         print("All ok!")
+        print("Ratio of modified videos: ", len(modified_videos)/max_videos)
 
     else:
         print("Some error ocurred")
