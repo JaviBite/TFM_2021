@@ -22,6 +22,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from keras.models import Sequential
+from keras.regularizers import l1, l2, l1_l2
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import TimeDistributed
@@ -36,10 +37,11 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
 
     model = Sequential()
     model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
-    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout)))
+    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout, \
+                             kernel_regularizer=l2(0.001), recurrent_regularizer=l2(0.001), bias_regularizer=l2(0.001))))
     model.add(Dropout(dropouts[1]))
-    #model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation = hidden_act))
+    model.add(Flatten())
+    model.add(Dense(hidden_dense_untis, activation = hidden_act, kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4)))
     model.add(Dropout(dropouts[2]))
     model.add(Dense(num_classes, activation = final_act))
 
@@ -111,13 +113,13 @@ def main():
 
     lr = [0.001]
     lstm_units = [32]
-    rec_drop = [0.2]
+    rec_drop = [0.3]
     lstm_act = ['tanh']
     lstm_rec_act = ['hard_sigmoid']
     final_act = ['softmax']
     hidden_act = ['sigmoid']
-    dropouts = [[0.3,0.2,0.1]]
-    hidden_dense_untis = [16]
+    dropouts = [[0.3,0.5,0.3]]
+    hidden_dense_untis = [64]
 
     optimizers = ['adam']
     losses = ['categorical_crossentropy']
@@ -173,7 +175,7 @@ def main():
     out_file = open("out_model_metrics.json", "w")
     json.dump(models_metrics, out_file, indent=1)
 
-    model.save('out_model.h5')
+    model.save('out_model_bilstm.h5')
 
     # evaluate LSTM
     #X, y = get_sequences(100, n_timesteps, size_elem)

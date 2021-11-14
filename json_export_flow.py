@@ -629,6 +629,9 @@ def main():
                         #Calcular flujo optico
                         flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
                                         None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+                        
+                        #Normalize flow
+                        #TODO
 
                         if DATA_AUGMENTATION:
                             roi_flip_frame = cv2.flip(roi_frame, 1)

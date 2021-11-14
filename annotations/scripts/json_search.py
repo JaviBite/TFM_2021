@@ -6,25 +6,7 @@ import re, random
 import cv2
 import numpy as np
 
-import argparse
-
-# Return the region of interest image from a given frame (it corresponds to the pan or cup zone)
-def getROI(frame, padding, width, height):
-
-    ret = frame
-
-    x1,x2,y1,y2 = funcioncarlos(frame)
-    
-    if x1-padding<0 : padding=x1
-    if x2+padding>=width : padding=int(width-1)-x2
-    if y1-padding<0 : padding=y1
-    if y2+padding>=height : padding=int(height-1)-y2
-
-    x1,x2,y1,y2 = x1-padding,x2+padding,y1-padding,y2+padding
-
-    return x1,x2,y1,y2
-
-    
+import argparse    
 
 def getVidPath(jsondata, localpath, vid):
     namepath = jsondata['file'][vid]['fname']
@@ -70,14 +52,18 @@ def main():
 
     video_ids = {}
     video_data = {}
+    video_regions = {}
     for tag, value in zip(data1['metadata'], data1['metadata'].values()):
-        #print(tag, value)
 
-        action = str(value['av']['1'])
+        action = None
+        if '1' in value['av']:
+            action = str(value['av']['1'])
+
         vid = int(value['vid'])
+        xy = value['xy']
 
         #if word in action and vid not in video_ids:
-        if re.search(word,action) is not None:
+        if action is not None and re.search(word,action) is not None:
             if vid not in video_ids:
                 video_ids[vid] = []
             
@@ -88,6 +74,12 @@ def main():
                 video_data[vid] = []
 
             video_data[vid].append(value)
+        
+        if len(xy) > 0:
+            if vid not in video_regions:
+                video_regions[vid] = []
+
+            video_regions[vid].append({'xy':xy,'z':value['z']})
 
 
     videos = dict(sorted(video_ids.items(), reverse=False))
@@ -121,6 +113,19 @@ def main():
 
             width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
             height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
+
+            # Get elipses
+            elipses = []
+            if vid in video_regions:
+                for region in video_regions[vid]:
+                    #print(region)
+                    c = (region['xy'][1], region['xy'][2])
+                    axes = (region['xy'][3]*2, region['xy'][4]*2)
+                    angle = 0
+
+                    opencv_elipse = (c, axes, angle)
+
+                    elipses.append(opencv_elipse)
 
             for frag in fragments:
 
@@ -165,6 +170,10 @@ def main():
                             cv2.putText(frame, 'Press p for pause', pos3, cv2.FONT_HERSHEY_SIMPLEX, 
                             0.75, (0, 0, 255), 2, cv2.LINE_AA)
 
+                            # Draw elipses
+                            for elipse in elipses:
+                                cv2.ellipse(frame, elipse, (0, 0, 255), 2)
+
                             # Display the resulting frame
                             cv2.imshow('Video', frame)
                         
@@ -194,95 +203,7 @@ def main():
             cap.release()
             
             # Closes all the frames
-            cv2.destroyAllWindows()
-
-    if out_folder is not None:
-        print("Saving video fragments...")
-
-        if not os.path.isdir(out_folder):
-            os.mkdir(out_folder)
-
-        repVideos = dict(sorted(video_data.items(), reverse=False))
-        out_name = word.replace(" ","_")
-        frag_count = 0
-
-        fragments = []
-        for vid, data in zip(repVideos, repVideos.values()):
-
-            videoPath = getVidPath(data1, localpath, str(vid)) 
-            for elem in data:
-                if len(elem['z']) == 2:
-                    fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vpath':videoPath})
-
-        if random_order:
-            random.shuffle(fragments)
-
-        for frag in fragments:
-
-            # Create a VideoCapture object and some useful data
-            videoPath = frag['vpath']
-            cap = cv2.VideoCapture(videoPath)
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            #duration = frame_count/fps
-
-            width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
-            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
-            
-            # Create video wirter
-            fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-            this_out_name = out_folder + '/' + out_name + '_' + str(frag_count) + '.avi'
-            
-            out = cv2.VideoWriter(this_out_name, fourcc, fps, (int(width),int(height)))
-            if args.region_interest:
-                out = cv2.VideoWriter(this_out_name, fourcc, fps, (int(args.dimension),int(args.dimension)))
-
-            init_frame = int(frag['time'][0] * fps)
-            final_frame = int(frag['time'][1] * fps)
-            #frame_no = init_frame/frame_count
-
-            text = frag['act']
-
-            #The first argument of cap.set(), number 2 defines that parameter for setting the frame selection.
-            #Number 2 defines flag CV_CAP_PROP_POS_FRAMES which is a 0-based index of the frame to be decoded/captured next.
-            #The second argument defines the frame number in range 0.0-1.0
-            cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
-
-            
-            # Check if camera opened successfully
-            if (cap.isOpened()== False): 
-                print("Error opening video  file")
-                continue
-            
-            # Read until video is completed
-            frame_i = init_frame
-
-            while(cap.isOpened()):
-                # Capture frame-by-frame
-                ret, frame = cap.read()
-                if frame_i <= final_frame and ret == True:  
-                    to_write = frame   
-
-                    if args.region_interest:
-                        to_write = getROI(frame, args.padding,width,height)
-                        to_write = cv2.resize(to_write,(args.dimension,args.dimension))
-
-                    out.write(to_write)
-                    frame_i =  frame_i + 1
-                
-                # Break the loop
-                else: 
-                    break
-            
-            out.release()
-            cap.release()
-            frag_count = frag_count + 1
-
-            if max_out_frags is not None and frag_count >= max_out_frags:
-                break
-
-        
-
+            cv2.destroyAllWindows()    
 
     # Closing file
     f1.close()
