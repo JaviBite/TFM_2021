@@ -1,5 +1,5 @@
 
-import json, random, string, math
+import json, random, string, math, re
 import argparse
 import cv2, codecs
 from tqdm import tqdm
@@ -86,6 +86,8 @@ def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
 
     total_pots = []
 
+    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
+
     for i in range(n_frames):
         ret, frame = cap.read()
 
@@ -102,11 +104,36 @@ def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
 
     return total_pots
 
+# Return the time in seconds where the pot is ready to be dettected
+MOTION_ACTION_REG = "poner (olla|sarten)|quitar (olla|sarten)|^mover (olla|sarten)"
+def get_motion_fragments(data):
+
+    fragments = {}
+
+    for value in data['metadata'].values():
+
+        vid = int(value['vid'])
+
+        action = None
+        if '1' in value['av']:
+            action = str(value['av']['1'])
+
+        hit = re.search(MOTION_ACTION_REG,action)
+        if action is not None and hit is not None:
+
+            if vid not in fragments:
+                fragments[vid] = []
+
+            fragments[vid].append(value['z'][1])
+
+    return fragments
+
 def parseargs():
     parser = argparse.ArgumentParser()
     parser.add_argument("via_json", type=str, help="Path to the json of the dataset (via annotations)")
     parser.add_argument('videos_dir', nargs='?', default=None, help="Dir where the videos are, if not set, json dir will be used")
     parser.add_argument('out_json', nargs='?', default="out.json", help="Path file for the output json")
+    parser.add_argument('-t','--time', type=float, default=None, help="Sample every t seconds")
     parser.add_argument('-v','--verbose', help="Print progress info on console", action="store_true")
     parser.add_argument('-vis','--visualice', help="Show dettections on screen", action="store_true")
     parser.add_argument('-sf','--search_frames', type=int, default=10, help="Search frames looking for pans")
@@ -124,6 +151,7 @@ def main():
     outfile = args.out_json
     verbose = args.verbose
     vis = args.visualice
+    sampling_time = args.time
 
     n_search_frames = args.search_frames
     max_videos = args.max_videos
@@ -148,6 +176,9 @@ def main():
 
     if max_videos is None:
         max_videos = total_videos
+
+    # Get motion fragments
+    fragments = get_motion_fragments(data_ours)
         
 
     # Counters
@@ -172,82 +203,113 @@ def main():
             continue
 
         # Get video info
-        video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         video_fps = int(cap.get(cv2.CAP_PROP_FPS))
         video_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        # Process the init frames and detect the pots
-        ret, frame = cap.read()
-        if not ret:
-            print("Error reading frames on ", video_path)
-            all_ok = False
-            break
+        #Initial values
+        init_frame = 50
+        frag_i = 0
+        finished_fragments = False
+        finished_temporal_sampling = False
+        while (not finished_temporal_sampling or not finished_fragments):
 
-        # CV approach
-        pots_cv = []
-        try:
-            pots_cv = detect_pots_cv(cap, 0, n_search_frames, blurri=5, VIS=False)
-        except OverflowError as of:
-            print("After the Overflow error", of, "skipping")
-        
-        # Detectron2 approach
-        pots_det = detect_pots_det_n(cap, 0, n_search_frames, coco_predictor) 
+            if finished_temporal_sampling:
+                if (frag_i < len(fragments[vid])):
+                    init_frame = int((fragments[vid][frag_i] + 1) * video_fps)
+                    frag_i += 1
+                else:
+                    finished_fragments = True
 
-        # Add the detectron 2 videos if no overlap cv ones
-        total_pots = filter_pots(pots_cv, pots_det)
+            # Process the init frames and detect the pots
 
-        if vis:
+            # Discard fragments at the end of the video
+            if(init_frame > video_length - video_fps * 1):
+                continue
 
-            frame_copy = frame.copy()
+            cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame)
+            ret, frame = cap.read()
+            if not ret:
+                print("Error reading frames on ", video_path)
+                all_ok = False
+                break
 
-            for pot in pots_cv:
-                cv2.ellipse(frame, pot, (0,0,255), 4)
-            for pot in pots_det:
-                cv2.ellipse(frame, pot, (255,0,0), 4)
-
-            for pot in total_pots:
-                cv2.ellipse(frame_copy, pot, (0,255,0), 4)
+            # CV approach
+            pots_cv = []
+            try:
+                pots_cv = detect_pots_cv(cap, init_frame, n_search_frames, blurri=5, VIS=False)
+            except OverflowError as of:
+                print("After the Overflow error", of, "skipping")
             
-            cv2.imshow("Elipses", frame)
-            cv2.imshow("Total elipses", frame_copy)
-            cv2.waitKey(100)
+            # Detectron2 approach
+            pots_det = detect_pots_det_n(cap, init_frame, n_search_frames, coco_predictor) 
 
-        if len(total_pots) > 0:
+            # Add the detectron 2 videos if no overlap cv ones
+            total_pots = filter_pots(pots_cv, pots_det)
 
-            if verbose: print("\tAdding new metadata...")
+            if vis:
 
-            for pot in total_pots:
+                frame_copy = frame.copy()
+
+                for pot in pots_cv:
+                    cv2.ellipse(frame, pot, (0,0,255), 4)
+                for pot in pots_det:
+                    cv2.ellipse(frame, pot, (255,0,0), 4)
+
+                for pot in total_pots:
+                    cv2.ellipse(frame_copy, pot, (0,255,0), 4)
                 
-                # Get the [angle,x0,y0,w,h] format
-                norm_pot = normalize_elipse(pot)
-                via_pot = elip_to_viaElip(norm_pot) 
+                cv2.imshow("Elipses", frame)
+                cv2.imshow("Total elipses", frame_copy)
+                cv2.waitKey(0)
 
-                # Generating the action value
-                new_value = {'vid':str(vid), 
-                            'flg':0, 
-                            'z':[0.0], 
-                            'xy':via_pot, 
-                            'av':{"2":"0"}}
+            if len(total_pots) > 0:
 
-                # Generating random metadata id
-                new_key = None
-                while(True):
-                    randid = ''.join(random.choices(string.ascii_lowercase + string.ascii_uppercase + string.digits, k=8))
-                    new_key = str(vid) + '_' + randid
-                    if new_key not in data_ours['metadata']:
-                        break
+                if verbose: print("\tAdding new metadata...")
 
-                # Inserting the new data
-                data_ours['metadata'][new_key] = new_value
+                for pot in total_pots:
+                    
+                    # Get the [angle,x0,y0,w,h] format
+                    norm_pot = normalize_elipse(pot)
+                    via_pot = elip_to_viaElip(norm_pot) 
 
-            if vid not in modified_videos:
-                modified_videos.append(vid)
+                    # Generating the action value
+                    time = 0.0
+                    if init_frame > 50:
+                        time = init_frame / video_fps
 
-        # No pots detected
-        else:
+                    new_value = {'vid':str(vid), 
+                                'flg':0, 
+                                'z':[time], 
+                                'xy':via_pot, 
+                                'av':{"2":"0"}}
 
-            if verbose: print("\tNo pots detected")
+                    # Generating random metadata id
+                    new_key = None
+                    while(True):
+                        randid = ''.join(random.choices(string.ascii_lowercase + string.ascii_uppercase + string.digits, k=8))
+                        new_key = str(vid) + '_' + randid
+                        if new_key not in data_ours['metadata']:
+                            break
+
+                    # Inserting the new data
+                    data_ours['metadata'][new_key] = new_value
+
+                if vid not in modified_videos:
+                    modified_videos.append(vid)
+
+            # No pots detected
+            else:
+
+                if verbose: print("\tNo pots detected")
+            
+
+            # Increment the initial frame
+            if sampling_time is None:
+                finished_temporal_sampling = True
+            else:
+                init_frame += int(sampling_time * video_fps)
+                if (init_frame + n_search_frames + 5 * video_fps >= video_length):
+                    finished_temporal_sampling = True
 
         count_videos += 1
         t.update()
