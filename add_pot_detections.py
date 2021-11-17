@@ -214,7 +214,7 @@ def main():
         while (not finished_temporal_sampling or not finished_fragments):
 
             if finished_temporal_sampling:
-                if (frag_i < len(fragments[vid])):
+                if (vid in fragments and frag_i < len(fragments[vid])):
                     init_frame = int((fragments[vid][frag_i] + 1) * video_fps)
                     frag_i += 1
                 else:
