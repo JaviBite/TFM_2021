@@ -1908,7 +1908,7 @@
             ],
             "xy": [],
             "av": {
-                "1": "destapar olla"
+                "1": "remover pasta"
             }
         },
         "4_YdzHsAMj": {
@@ -29461,23 +29461,6 @@
             "xy": [],
             "av": {
                 "1": "poner pasta"
-            }
-        },
-        "1_SY6bIuDX": {
-            "vid": "1",
-            "flg": 0,
-            "z": [
-                38.669
-            ],
-            "xy": [
-                2,
-                600.388,
-                406.99,
-                0.777,
-                0
-            ],
-            "av": {
-                "1": "poner espagueti"
             }
         },
         "1_hzK5a4PW": {
