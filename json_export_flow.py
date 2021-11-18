@@ -199,87 +199,118 @@ def getROI2(cap, init_frame, n_search_frames, padding, width, height, flow, VIS)
 
         return None
 
-def getROI3(cap, init_frame, coco, n_search_frames, padding, width, height, flow, VIS):
+def getMostFlowRoi(possible_rois, cap, init_frame, search_frame, padding=0, visualize=False):
 
-    blurri = 5
+    cap.set(cv2.CAP_PROP_POS_FRAMES, search_frame)
 
     ret, frame = cap.read()
+    ret, frame2 = cap.read()
 
-    total_pots = []
+    height, width = frame.shape[:2]
 
-    # CV approach
-    try:
-        pots_cv = detect_pots_cv(cap, init_frame, n_search_frames, blurri, False)
-    except OverflowError as of:
-        print("After the Overflow error", of, "skipping")
-        pots_cv = []
+    frameflow1 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    frameflow2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
 
-    total_pots = total_pots + pots_cv
-    
-    # Detectron2 approach
-    pots_det = detect_pots_det_n(cap, init_frame, 1, coco)         
+    #Get flow
+    flow = cv2.calcOpticalFlowFarneback(frameflow1, frameflow2, 
+                                        None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
-    total_pots = total_pots + pots_det
+    # Get the pot with the most flow near it
+    most_flow_index = 0
+    if len(possible_rois) > 1:
 
-    if VIS:
-        for pot in pots_cv:
-            cv2.ellipse(frame, pot, (0,0,255), 4)
-        for pot in pots_det:
-            cv2.ellipse(frame, pot, (255,0,0), 4)
+        averages = []
+        for pot in possible_rois:
+
+            cx, cy, ax, ay = pot
+            c = (cx,cy)
+            axes = (ax, ay)
+
+            area = int((axes[0]+axes[1]) / 4)
+
+            areax = [slice(int(c[1]-area),int(c[1]+area)), 
+                        slice(int(c[0]-area),int(c[0]+area)), 0]
+            areay = [slice(int(c[1]-area),int(c[1]+area)), 
+                        slice(int(c[0]-area),int(c[0]+area)), 1]
+            
+            fx, fy = flow[tuple(areax)], flow[tuple(areay)] 
+            v = np.sqrt(fx * fx + fy * fy)
+
+            averages.append(np.nanmean(v[np.nonzero(v)]))
+
+        #print(averages)
+        try:
+            most_flow_index = np.argmax(averages)
+        except ValueError as e:
+            print("Value error")
+            return None
+        #print(most_flow_index)
+        
+    chosen_pot = possible_rois[most_flow_index]
+
+    elip = ((chosen_pot[0], chosen_pot[1]), (chosen_pot[2]*2, chosen_pot[3]*2), 0)
+    bbox, _ = encuentra_box(elip)
+    x1, y1, x2, y2 = bbox
+
+    #Padding
+    x1,x2,y1,y2 = x1-padding, x2+padding, y1-padding, y2+padding
+
+    x2 = x2-x1  # x2 now is lenght in x axis
+    y2 = y2-y1  # y2 now is lenght in y axis
+
+    if x1 < 0 : x1 = 0
+    if x1+x2 >= width : x2 = width - x1
+    if y1 < 0 : y1 = 0
+    if y1+y2 >= height : y2 = height - y1    
+
+    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)    
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame)
+
+    if visualize:
+        for pot in possible_rois:
+            c = (pot[0], pot[1])
+            axes = (pot[2]*2, pot[3]*2)
+
+            opencv_elipse = (c, axes, 0)
+            cv2.ellipse(frame, opencv_elipse, (0,0,255), 4)
+
+        # Draw Selected ROI
+        pt1 = (x1,y1)
+        pt2 = (x1+x2,y1+y2)
+        cv2.rectangle(frame, pt1, pt2, (0,255,0), 4)
+
         cv2.imshow("LAS ELIPSES FINALES", frame)
     
+    return x1, y1, x2, y2
 
-    cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame) 
+# rois list must be ordered from soon to late        
+def closest_rois(rois, time):
 
-    if len(total_pots) > 0:
+    ret_rois = []
+    # Get the time of the closest (temporaly) roi
+    last_time = rois[0]['z'][0]
+    ret_rois.append(rois[0]['xy'][1:])
 
-        # Get the pot with the most flow near it
-        most_flow_index = 0
-        if len(total_pots) > 1:
+    for idx in range(1,len(rois)):
+        roi_time = rois[idx]['z'][0]
 
-            averages = []
-            for pot in total_pots:
-                c, axes, _ = pot
+        # If the time is greater than the last time, we have found the closest roi
+        if roi_time > time:
+            break
 
-                area = int((axes[0]+axes[1]) / 4)
+        # Same region timestamp
+        elif abs(roi_time - last_time) < 0.5:
+            ret_rois.append(rois[idx]['xy'][1:])
 
-                areax = [slice(int(c[1]-area),int(c[1]+area)), 
-                         slice(int(c[0]-area),int(c[0]+area)), 0]
-                areay = [slice(int(c[1]-area),int(c[1]+area)), 
-                         slice(int(c[0]-area),int(c[0]+area)), 1]
-                
-                fx, fy = flow[tuple(areax)], flow[tuple(areay)] 
-                v = np.sqrt(fx * fx + fy * fy)
+        # Ne different timestamp
+        else:
+            ret_rois.clear()
 
-                averages.append(np.nanmean(v[np.nonzero(v)]))
+            last_time = rois[idx]['z'][0]
+            ret_rois.append(rois[idx]['xy'][1:])
 
-            #print(averages)
-            try:
-                most_flow_index = np.argmax(averages)
-            except ValueError as e:
-                print("Value error")
-                return None
-            #print(most_flow_index)
-            
-        bbox, _ = encuentra_box(total_pots[most_flow_index])
-        x1, y1, x2, y2 = bbox
-
-        x2 = x2-x1
-        y2 = y2-y1
-
-        #Padding
-        x1,x2,y1,y2 = x1-padding, x2+padding, y1-padding, y2+padding
-
-        if x1 < 0 : x1 = 0
-        if x1+x2 >= width : x2 = width - x1
-        if y1 < 0 : y1 = 0
-        if y1+y2 >= height : y2 = height - y1        
-
-        return int(x1), int(y1), int(x2), int(y2)
-
-    else:
-
-        return None
+    return ret_rois
 
 def getVidPath(jsondata, localpath, vid):
     namepath = jsondata['file'][vid]['fname']
@@ -295,6 +326,8 @@ def main():
     DET_PAD = 0
 
     FRAMES_PER_SEQ = 50
+
+    RANDOM_STATE = 42
 
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str, help="Path to the dataset json")
@@ -313,6 +346,7 @@ def main():
     parser.add_argument('-w',"--window", type=float, default=1.0, help="Percetnage of new data for the new window of fragment.")
     parser.add_argument('-jf',"--just_flow", action="store_true", help="Store flow instead of HOG")
     parser.add_argument('-s',"--split", type=float, default=0.2, help="Split percentage for the dataset in Train and Test")
+    parser.add_argument('-d',"--debug", action="store_true", help="Debug mode")
 
     args = parser.parse_args()
     out_file = args.out_file
@@ -320,7 +354,8 @@ def main():
     max_out_frags = args.max_fragments
     random_order = args.random_order
 
-    VIS = args.visualize
+    VIS = args.visualize or args.debug
+    debug = args.debug
 
     FLOW_ACC = args.flow_accomulate
     DATA_AUGMENTATION = args.augmentation
@@ -365,38 +400,41 @@ def main():
                           'roi_dim': args.dimension,
                           'augmentation': DATA_AUGMENTATION,}
 
-    metadata_out = open(metafile, "w")
-    json.dump(metadata, metadata_out, indent=1)
-    metadata_out.close()
-
-    video_ids = {}
     video_data = {}
-    for tag, value in zip(data1['metadata'], data1['metadata'].values()):
+    regions = {}
+    for value in data1['metadata'].values():
         #print(tag, value)
 
-        action = str(value['av']['1'])
         vid = int(value['vid'])
 
-        #if word in action and vid not in video_ids:
-        for word in words:
-            if re.search(word,action) is not None:
-                if vid not in video_ids:
-                    video_ids[vid] = []
-                
-                if action not in video_ids[vid]:
-                    video_ids[vid].append(action)
+        # Temporal segment
+        if len(value['xy']) == 0:
+            action = str(value['av']['1'])
 
-                if vid not in video_data:
-                    video_data[vid] = []
+            #if word in action and vid not in video_ids:
+            for word in words:
+                if re.search(word,action) is not None:
 
-                to_append = value
-                to_append['match'] = words.index(word)
-                video_data[vid].append(to_append)
-                break
+                    if vid not in video_data:
+                        video_data[vid] = []
 
-    #videos = dict(sorted(video_ids.items(), reverse=False))
-    #for vid, value in zip(videos, videos.values()):
-    #    print(vid, value)
+                    to_append = value
+                    to_append['match'] = words.index(word)
+                    video_data[vid].append(to_append)
+                    break
+
+        # Region data
+        else:
+
+            if vid not in regions:
+                regions[vid] = []
+
+            #TODO check good region?
+            regions[vid].append(value)
+
+    # Short regions in chronological order
+    for vid in regions.keys():
+        regions[vid] = sorted(regions[vid], key=lambda d: d['z'][0], reverse=False)
 
     repVideos = dict(sorted(video_data.items(), reverse=False))
     out_name = word.replace(" ","_")
@@ -408,7 +446,7 @@ def main():
         videoPath = getVidPath(data1, localpath, str(vid)) 
         for elem in data:
             if len(elem['z']) == 2:
-                fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vpath':videoPath, 'class':elem['match']})
+                fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vid':vid ,'vpath':videoPath, 'class':elem['match']})
 
     if random_order:
         random.shuffle(fragments)
@@ -451,8 +489,10 @@ def main():
     t = tqdm(total=total_fragments)
     X = []
     y = []
+    metasamples = []
 
     frag_i = 0
+    no_flow_counter = 0
     # LOOP AROUND FRAGMENTS
     while frag_i < len(fragments):
 
@@ -483,6 +523,7 @@ def main():
                 frag = fragments[frag_i]
             
             # Create a VideoCapture object and some useful data
+            vid = frag['vid']
             videoPath = frag['vpath']
             cap = cv2.VideoCapture(videoPath)
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -579,13 +620,8 @@ def main():
             
 
             # Get roi
-            cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame - 50)
-            ret, frame = cap.read()
-            n_search_frames = 5
-            #roi = getROI2(cap, init_frame, n_search_frames, args.padding, width, height, acc_flow, VIS)
-            
-            flow_for_roi = flow_2_frames(cap, init_frame - 50, final_frame-(args.frames//2))
-            roi = getROI3(cap, init_frame, coco_predictor, n_search_frames, args.padding, width, height, flow_for_roi, VIS)
+            possible_rois = closest_rois(regions[vid], init_frame / fps)
+            roi = getMostFlowRoi(possible_rois, cap, init_frame, int(init_frame+(args.frames/2)),padding=args.padding, visualize=VIS)
 
             if roi is not None:
                 x1, y1, x2, y2 = roi
@@ -594,10 +630,19 @@ def main():
                 print("No ROI")
                 frag_i += 1
                 continue
+
+            if debug:
+                
+                img_roi = frameflow1[tuple(roi_window)]
+                img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
+                cv2.imshow("ROI", img_roi)
+
+                frag_count += 1
+                cv2.waitKey(0)
             
             bad = False
             # LOOP AROUND SLICES OF THE FRAGMENT
-            while (cap.isOpened() and total_final_frame - init_frame >= args.frames + 1 and not bad):
+            while (not debug and cap.isOpened() and total_final_frame - init_frame >= args.frames + 1 and not bad):
 
                 cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
                 ret, frame = cap.read()
@@ -691,7 +736,8 @@ def main():
                                 if count_flow <= 0.05:
                                     bad_hog = bad_hog + 1
                                     if bad_hog > 3:
-                                        print("No flow, skipping")
+                                        # print("No flow, skipping")
+                                        no_flow_counter += 1
                                         bad = True
                                         break
 
@@ -716,7 +762,8 @@ def main():
                             if count_flow <= 0.05:
                                 bad_hog = bad_hog + 1
                                 if bad_hog > 5:
-                                    print("No flow, skipping")
+                                    # print("No flow, skipping")
+                                    no_flow_counter += 1
                                     bad = True
                                     break
 
@@ -759,10 +806,12 @@ def main():
 
                 y.append(class_id)
                 X.append(np.array(sequence))
+                metasamples.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
 
                 if DATA_AUGMENTATION:
                     y.append(class_id)
                     X.append(np.array(sequence_aug))
+                    metasamples.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 1})
 
                 frag_count = frag_count + 1
                 t.update()
@@ -790,8 +839,21 @@ def main():
     y = np.array(y)
     X = np.array(X)
 
-    Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size=args.split, stratify=y)
+    Xtrain, Xtest, ytrain, ytest, metatrain, metatest = train_test_split(X, y, metasamples, test_size=args.split, random_state=RANDOM_STATE ,stratify=y)
 
+    # Save dataset
+    np.savez(out_file + "_train.npz", a=Xtrain, b=ytrain)
+    np.savez(out_file + "_test.npz", a=Xtest, b=ytest)
+
+    # Save meta data
+    metadata['samples_train'] = metatrain
+    metadata['samples_test'] = metatest
+
+    metadata_out = open(metafile, "w")
+    json.dump(metadata, metadata_out, indent=0)
+    metadata_out.close()
+
+    # Print some info
     print("TRAIN: ")
     print(Xtrain.shape)
     print(ytrain.shape)
@@ -800,10 +862,8 @@ def main():
     print(Xtest.shape)
     print(ytest.shape)
 
-    np.savez(out_file + "_train.npz", a=Xtrain, b=ytrain)
-    np.savez(out_file + "_test.npz", a=Xtest, b=ytest)
-
     print("Total classes count:", count_classes)
+    print("No flow count: ", no_flow_counter, "(", no_flow_counter/(frag_count+no_flow_counter) ,")")
 
 if __name__ == "__main__":
     main()
