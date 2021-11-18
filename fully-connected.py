@@ -1,104 +1,71 @@
 '''
 Fully connected neural network for class prediction
+
+@author: Miguel Marcos
 '''
 
 import keras
 from keras.models import Sequential
-from keras.layers import Input, Dense, Dropout
-from keras.layers.experimental import RandomFourierFeatures
+from keras.layers import Input, Dense, Dropout, BatchNormalization
 from keras.callbacks import EarlyStopping
 from keras.optimizers import RMSprop, Adam, SGD
-import numpy as np
 
+import bsh_nn_utils as util
 
-num_tiles = 117**2 # Number of inputs for the neural network
-classes = [] # (id,classname) pairs will be stored here when reading the metadata file
+num_tiles = 15*15*9 # Number of inputs for the neural network
+input_shape = (num_tiles,)
 
-path = 'D:\\GI Lab\\'
-data_path = path+'out_test_aug_500_1_p10.npz'
-metadata_path = path+'out_test_aug_500_1_p10_metadata.txt'
+path = 'D:\\GI Lab\\Pruebas_acc_v2\\'
+file = 'out_flow_f8_mf500'
 
-def load_hog():
-    print('Loading dataset...')
-    x_train = x_test = np.array([[0]*num_tiles])
-    y_train = y_test = np.array([])
+num_it = 10
 
-    print('Opening metadata file...')
-    md_file = open(metadata_path)
-    num_classes = 0
-    for line in md_file:
-        classes.append((num_classes,line[3:]))
-        num_classes = num_classes + 1
-    print('Read ',num_classes,' classes')
-    md_file.close()
+print('Loading dataset...')
+Xtrain,Xtest,Ytrain,Ytest,num_classes,classes = util.load_data(path,file,num_tiles)
+print('Total samples: ',Xtrain.shape[0]+Xtest.shape[0])
 
-    print('Loading training data...')
-    data = np.load(data_path)
-
-    print('Separating test data...')
-    for (i,_) in classes:
-        x = np.squeeze(data['a'][:])
-        y = data['b'][:]
-        x = x[y==i]
-        y = y[y==i]
-        num_samples = len(y)
-        test_samples = num_samples//10+1
-        train_samples = num_samples-test_samples
-        print('Class: ',i)
-        print('Train samples: ',train_samples,', Test samples: ', test_samples)
-        x_test = np.append(x_test,x[:test_samples],axis=0)
-        y_test = np.append(y_test,y[:test_samples])
-        x_train = np.append(x_train,x[test_samples:],axis=0)
-        y_train = np.append(y_train,y[test_samples:])
-
-    x_test = x_test[1:]
-    x_train = x_train[1:]
-    print('Done')
-
-    return (x_train,y_train),(x_test,y_test),num_classes
-
-# load HOG
-(x_train, y_train), (x_test, y_test), num_classes = load_hog()
-print('Total train samples: ',x_train.shape)
-print('Total test samples: ',x_test.shape)
+total_score = 0
 
 # convert class vectors to binary class matrices
-y_train = keras.utils.to_categorical(y_train, num_classes)
-y_test  = keras.utils.to_categorical(y_test,  num_classes)
-
-# random permutation of training data
-# np.random.seed(0)
-# p = np.arange(x_train.shape[0])
-# np.random.shuffle(p)
-# x_train = x_train[p]
-# y_train = y_train[p]
+Ytrain = keras.utils.to_categorical(Ytrain, num_classes)
+Ytest  = keras.utils.to_categorical(Ytest,  num_classes)
 
 # Stop training when validation error no longer improves
 earlystop=EarlyStopping(monitor='val_loss', patience=3, 
-                        verbose=1, mode='auto')
+                        verbose=0, mode='auto')
 
-# Model definition
-model = Sequential()
-model.add(Input(shape=(num_tiles,)))
-model.add(RandomFourierFeatures(4096))
-model.add(Dense(num_classes, activation='softmax'))
+for i in range(num_it):
+    # Model definition
+    model = Sequential()
+    #model.add(BatchNormalization())
+    model.add(Dense(512, activation='relu', input_shape=input_shape))
+    #model.add(BatchNormalization())
+    model.add(Dropout(0.1))
+    model.add(Dense(1024, activation='relu'))
+    #model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(Dense(num_classes, activation='softmax'))
+    
+    model.compile(loss='categorical_crossentropy',
+                  optimizer=RMSprop(),
+                  metrics=['accuracy'])
+    
+    # Model training
+    history = model.fit(Xtrain, Ytrain,
+        batch_size=3,
+        epochs=20,
+        validation_split=0.2,
+        callbacks=[earlystop],
+        verbose=False)
 
-model.compile(loss='categorical_crossentropy',
-              optimizer=Adam(),
-              metrics=['accuracy'])
-
-print('Commencing training...')
-# Model training
-model.fit(x_train, y_train,
-    batch_size=5,
-    epochs=20,
-    validation_split=0.1,
-    callbacks=[earlystop],
-    verbose=False)
-
-# Model evaluation
-train_score = model.evaluate(x_train, y_train, verbose=0)
-test_score = model.evaluate(x_test, y_test, verbose=0)
-print('%s %2.2f%s' % ('Accuracy train: ', 100*train_score[1], '%' ))
-print('%s %2.2f%s' % ('Accuracy test:  ', 100*test_score[1], '%'))
-
+    # Model evaluation
+    train_score = model.evaluate(Xtrain, Ytrain, verbose=0)
+    test_score = model.evaluate(Xtest, Ytest, verbose=0)
+    #print('%s %2.2f%s' % ('Accuracy train: ', 100*train_score[1], '%' ))
+    print('%s %2.2f%s' % ('Accuracy test:  ', 100*test_score[1], '%'))
+    total_score = total_score + test_score[1]
+    
+    Ypred = model.predict(Xtest)
+    util.plot_confusion_matrix(Ytest,Ypred,num_classes)
+#util.plot_history(history)
+print('%s %2.2f%s' % ('Averages accuracy:  ', 100*total_score/num_it, '%'))
