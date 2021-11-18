@@ -145,21 +145,19 @@ def main():
     # do experiments
     NUM_EXP = 1
 
-    lr = [0.001] * NUM_EXP
-    lstm_units = [32] * NUM_EXP
-    rec_drop = [0.2, 0.4, 0.5] * 2
-    lstm_act = ['relu'] * NUM_EXP
-    lstm_rec_act = ['hard_sigmoid'] * NUM_EXP
-    final_act = ['softmax'] * NUM_EXP
-    hidden_act = ['sigmoid'] * NUM_EXP
-    dropouts = [[0.5,0.3,0.2]] * NUM_EXP
-    hidden_dense_untis = [32] * NUM_EXP
+    lr = [0.001]
+    lstm_units = [512] 
+    rec_drop = [0.2] 
+    lstm_act = ['relu']
+    lstm_rec_act = ['hard_sigmoid'] 
+    final_act = ['softmax'] 
+    hidden_act = ['sigmoid']
+    dropouts = [[0.5,0.3,0.2]] 
+    hidden_dense_untis = [1024] 
 
-    optimizers = ['adam'] * NUM_EXP
-    losses = ['categorical_crossentropy'] * NUM_EXP
-    epochs = [50] * NUM_EXP
-
-    to_vis = ['rec_drop','dropouts']
+    optimizers = ['adam'] 
+    losses = ['categorical_crossentropy'] 
+    epochs = [75] 
 
     BATCH_SIZE = 10
     i = 0
@@ -217,7 +215,7 @@ def main():
     out_file = open("out_model_metrics.json", "w")
     json.dump(models_metrics, out_file, indent=1)
 
-    model.save('out_model.h5')
+    model.save('out_model_convlstm.h5')
 
     # evaluate LSTM
     #X, y = get_sequences(100, n_timesteps, size_elem)
