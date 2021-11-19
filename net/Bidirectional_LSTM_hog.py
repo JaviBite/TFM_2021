@@ -22,6 +22,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from keras.models import Sequential
+from keras.losses import categorical_crossentropy as cc
 from keras.regularizers import l1, l2, l1_l2
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
@@ -207,6 +208,16 @@ def main():
     disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=class_labels)
     disp.plot()
 
+    # Loss histogram
+    losses = []
+    for i in range(len(valX)):
+        losses.append(cc(valy[i], yhat[i]))
+
+    fig, axs = pyplot.subplots(1, 1, constrained_layout=True)
+    axs.hist(losses)
+    axs.set_title('Loss histogram')
+    axs.set_xlabel('Loss value')
+    axs.set_ylabel('Frecuency')
     
     pyplot.show()
 
