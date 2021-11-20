@@ -130,23 +130,24 @@ def main():
     BATCH_SIZE = 10
     i = 0
 
-    model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
-                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
-    opt = get(optimizers[i])
-    opt.learning_rate = lr[i]
-    model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
-    #print(model.summary())
-
-    # Early Estopping
-    es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
-    reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
-
     # Define the K-fold Cross Validator
     kfold = KFold(n_splits=5, shuffle=True)
 
     # K-fold Cross Validation model evaluation
     fold_no = 1
+    model = None
     for train, val in kfold.split(X, y):
+
+        model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
+                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
+        opt = get(optimizers[i])
+        opt.learning_rate = lr[i]
+        model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
+        #print(model.summary())
+
+        # Early Estopping
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
+        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
 
         start = time.time()
         history = model.fit(X[train], y[train], validation_data=(X[val], y[val]), epochs=epochs[i], batch_size=BATCH_SIZE, 
