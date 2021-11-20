@@ -31,6 +31,7 @@ from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import SGD, Adam, get
 from tqdm import tqdm
+from sklearn.model_selection import KFold
 
 from matplotlib import pyplot
 
@@ -140,37 +141,46 @@ def main():
     es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
     reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
 
-    start = time.time()
-    history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                            callbacks=[es, reduce_lr], shuffle=True, verbose=1)
-    end = time.time()
-    hours, rem = divmod(end-start, 3600)
-    minutes, seconds = divmod(rem, 60)
-    elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
+    # Define the K-fold Cross Validator
+    kfold = KFold(n_splits=5, shuffle=True)
 
-    print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+    # K-fold Cross Validation model evaluation
+    fold_no = 1
+    for train, val in kfold.split(X, y):
 
-    model_json = {'lr': lr[i],
-                'lstm_units': lstm_units[i],
-                'rec_drop': rec_drop[i],
-                'lstm_act': lstm_act[i],
-                'lstm_rec_act': lstm_rec_act[i],
-                'final_act': final_act[i],
-                'hidden_act': hidden_act[i],
-                'dropouts': dropouts[i],
-                'hidden_dense_untis': hidden_dense_untis[i],
-                'optimizers': optimizers[i],
-                'losses': losses[i],
-                'epochs': epochs[i]
-    }
+        start = time.time()
+        history = model.fit(X[train], y[train], validation_data=(X[val], y[val]), epochs=epochs[i], batch_size=BATCH_SIZE, 
+                                callbacks=[es, reduce_lr], shuffle=True, verbose=1)
+        end = time.time()
+        hours, rem = divmod(end-start, 3600)
+        minutes, seconds = divmod(rem, 60)
+        elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
 
-    metrics = history.history
+        fold_no = fold_no + 1
 
-    lr_list = []
-    for f in metrics['lr']:
-        lr_list.append(float(f))
-    metrics['lr'] = lr_list
-    models_metrics = [{'model': model_json, 'history': metrics, 'etime': elapsed_time}]
+        print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+
+        model_json = {'lr': lr[i],
+                    'lstm_units': lstm_units[i],
+                    'rec_drop': rec_drop[i],
+                    'lstm_act': lstm_act[i],
+                    'lstm_rec_act': lstm_rec_act[i],
+                    'final_act': final_act[i],
+                    'hidden_act': hidden_act[i],
+                    'dropouts': dropouts[i],
+                    'hidden_dense_untis': hidden_dense_untis[i],
+                    'optimizers': optimizers[i],
+                    'losses': losses[i],
+                    'epochs': epochs[i]
+        }
+
+        metrics = history.history
+
+        lr_list = []
+        for f in metrics['lr']:
+            lr_list.append(float(f))
+        metrics['lr'] = lr_list
+        models_metrics = [{'model': model_json, 'history': metrics, 'etime': elapsed_time}]
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
