@@ -31,19 +31,20 @@ from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import SGD, Adam, get
 from tqdm import tqdm
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from matplotlib import pyplot
 
-def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis):
+def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis, regu):
 
     model = Sequential()
     model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
     model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout, \
-                             kernel_regularizer=l2(0.001), recurrent_regularizer=l2(0.001), bias_regularizer=l2(0.001))))
+                             activity_regularizer = l1(0.01))))# \
+                             #kernel_regularizer=l2(0.001), recurrent_regularizer=l2(0.001), bias_regularizer=l2(0.001))))
     model.add(Dropout(dropouts[1]))
     model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation = hidden_act, kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4)))
+    model.add(Dense(hidden_dense_untis, activation = hidden_act, kernel_regularizer=l1(l1=0.001)))
     model.add(Dropout(dropouts[2]))
     model.add(Dense(num_classes, activation = final_act))
 
@@ -112,34 +113,40 @@ def main():
     n_features = X.shape[2]
 
     INPUT_SHAPE = (n_timesteps, n_features)
+    
+    SPLITS = 5
+    
+    lr = [0.001] * SPLITS
+    lstm_units = [32] * SPLITS
+    rec_drop = [0.3] * SPLITS
+    lstm_act = ['tanh'] * SPLITS
+    lstm_rec_act = ['hard_sigmoid'] * SPLITS
+    final_act = ['softmax'] * SPLITS
+    hidden_act = ['sigmoid'] * SPLITS
+    dropouts = [[0.5,0.4,0.3]] * SPLITS
+    hidden_dense_untis = [64] * SPLITS
+    regularicer = [0.001] * SPLITS
 
-    lr = [0.001]
-    lstm_units = [32]
-    rec_drop = [0.3]
-    lstm_act = ['tanh']
-    lstm_rec_act = ['hard_sigmoid']
-    final_act = ['softmax']
-    hidden_act = ['sigmoid']
-    dropouts = [[0.3,0.5,0.3]]
-    hidden_dense_untis = [64]
-
-    optimizers = ['adam']
-    losses = ['categorical_crossentropy']
-    epochs = [30]
+    optimizers = ['adam'] * SPLITS
+    losses = ['categorical_crossentropy'] * SPLITS
+    epochs = [30] * SPLITS
+    
+    to_vis = ['regularicer','rec_drop']
 
     BATCH_SIZE = 10
     i = 0
 
     # Define the K-fold Cross Validator
-    kfold = KFold(n_splits=5, shuffle=True)
+    kfold = StratifiedKFold(n_splits=SPLITS, shuffle=True)
 
     # K-fold Cross Validation model evaluation
     fold_no = 1
     model = None
-    for train, val in kfold.split(X, y):
+    models_metrics = []
+    for train, val in kfold.split(X, labels):
 
         model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
-                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
+                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i])
         opt = get(optimizers[i])
         opt.learning_rate = lr[i]
         model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
@@ -172,7 +179,8 @@ def main():
                     'hidden_dense_untis': hidden_dense_untis[i],
                     'optimizers': optimizers[i],
                     'losses': losses[i],
-                    'epochs': epochs[i]
+                    'epochs': epochs[i],
+                    'regularicer': regularicer[i]
         }
 
         metrics = history.history
@@ -181,7 +189,11 @@ def main():
         for f in metrics['lr']:
             lr_list.append(float(f))
         metrics['lr'] = lr_list
-        models_metrics = [{'model': model_json, 'history': metrics, 'etime': elapsed_time}]
+        models_metrics.append({'model': model_json, 'history': metrics, 'etime': elapsed_time, 'vis':to_vis})
+        
+        i += 1
+        
+        valX, valy = X[val], y[val]
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
@@ -218,6 +230,8 @@ def main():
 
     disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=class_labels)
     disp.plot()
+    
+    pyplot.show()
 
     # Loss histogram
     losses = []
