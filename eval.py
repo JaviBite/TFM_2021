@@ -47,6 +47,18 @@ def main():
     metadata = json.load(metadata_in)
 
     class_labels = metadata['classes']
+    metadata_train_samples = metadata['samples_test']
+
+    jsondata = sys.argv[5]
+    with open(jsondata) as json_file:
+        data = json.load(json_file)
+
+    videoPaths = data['file']
+    local_path = data['config']['file']['loc_prefix']['1'][8:]
+    
+    acc = int(metadata['config']['accomulation'])
+    seg_frames = int(metadata['config']['seg_frames'])
+    dim = int(metadata['config']['roi_dim'])
 
     # Normalice
     X_norm = []
@@ -154,8 +166,9 @@ def main():
     # Show bad samples
     bad_samples = y_argmax != yhat_argmax
 
+    out_folder = "out_hogs"
     for i in range(len(bad_samples)):
-        if bad_samples[i]:
+        if bad_samples[i] and yhat_argmax[i] == 1 and y_argmax[i] == 3:
 
             predicted = class_labels[yhat_argmax[i]]
             true_label = class_labels[y_argmax[i]]
@@ -163,51 +176,103 @@ def main():
             print("\nBad sample: ", i)
             print("True label: ", true_label)
             print("Predicted label: ", predicted)
-
+            
+            # Load hog sequence
             hog_image_sec = []
             for t in range(N_TIMESTEPS):
                 hog = X[i,t,:,:,:]
 
                 hog_image = get_hog_image(hog, (16,16))
 
-                hog_image = hog_image / np.max(hog_image)
-                hog_image_sec.append(hog_image.astype('float32'))
+                hog_image = (hog_image / np.max(hog_image))  * 255
+                hog_image = cv2.cvtColor(hog_image.astype('uint8'),cv2.COLOR_GRAY2BGR)
+                hog_image_sec.append(hog_image)
 
-            t = 0
-            key = 0
-            while (key != ord('n')):
-                hog_image = hog_image_sec[t]
-                (w, h), _ = cv2.getTextSize(str(i), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 1)
-                hog_image = img = cv2.rectangle(hog_image, (0, 0), (w + 2, 10), (255,255,255), -1)
-                hog_image = cv2.putText(hog_image, str(i), (2, 8), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,0), 1)
-                cv2.imshow('HOG: ' , hog_image)
-                key = cv2.waitKey(100)
-                t = (t + 1) % N_TIMESTEPS
+            # Load frame sequence
+            row_i = i
+            print(metadata_train_samples[row_i])
 
-            key = cv2.waitKey()
+            initFrame, finalFrame = metadata_train_samples[row_i]['frames']
+            initFrame = initFrame - seg_frames
+            finalFrame = finalFrame - seg_frames
+
+            vid = str(metadata_train_samples[row_i]['vid'])
+            vidPath = local_path + videoPaths[vid]['fname']
+                
+            class_label = str(class_labels[labels[row_i]])
             
-            if key == ord('s'):
+            roi = metadata_train_samples[row_i]['roi']
+            x1, y1, x2, y2 = roi
+            roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
 
-                print("Saving video...")
-                                
-                out_folder = "out_hogs"
-                if not os.path.exists(out_folder):
-                    os.makedirs(out_folder)
+            #Open video
+            cap = cv2.VideoCapture(vidPath)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, initFrame)
 
+            frames = []
+            frame_i = initFrame
+            while cap.isOpened() and frame_i <= finalFrame:
+                ret, frame = cap.read()
+                roi_frame = cv2.resize(frame[roi_window], (dim,dim))
+                frames.append(roi_frame.astype('uint8'))
+                frame_i += 1
 
-                #Save video
-                video_file = out_folder + "/T=" + true_label + "_P=" + predicted + "_I=" + str(i) + ".avi"
+            next = False
+            frame_i = 0
+            acc_i = 0
+            hog_i = 0
+            hog_image = frames[0]*0
+            vis_iamge = cv2.vconcat([frames[0],hog_image])
+            saving_i = 0
+            while not next or saving_i > 0:
 
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(video_file, fourcc, 7.0, hog_image.shape)
+                frame = frames[frame_i]
+                frame_i = (frame_i + 1) % len(frames)
 
-                for j in range(len(hog_image_sec)*5):
-                    j = j % N_TIMESTEPS
-                    image = np.uint8(hog_image_sec[j]*255)
-                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)    
-                    out.write(image)
+                if acc_i >= acc:
+                    acc_i = 0
 
-                out.release()
+                    hog_image = hog_image_sec[hog_i]                    
+                    hog_i = (hog_i + 1) % N_TIMESTEPS
+
+                acc_i += 1                
+
+                resized_hog = cv2.resize(hog_image, (dim, dim))
+
+                vis_iamge = cv2.vconcat([frame,resized_hog])
+                text = "T: " + true_label + ", P " + predicted
+                (w, h), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                vis_iamge = cv2.rectangle(vis_iamge, (0, 0), (w + 4, 14), (255,255,255), -1)
+                vis_iamge = cv2.putText(vis_iamge, text, (3, 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+
+                cv2.imshow('Sample', vis_iamge)
+                key = cv2.waitKey(50)
+
+                if key == ord('n'):
+                    next = True
+                if key == ord('s'):
+                    print("Saving video...")
+                    next = True
+                    saving_i = 5 * seg_frames
+
+                    if not os.path.exists(out_folder):
+                        os.makedirs(out_folder)
+
+                    video_file = out_folder + "/T=" + true_label + "_P=" + predicted + "_I=" + str(i) + ".avi"
+
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter(video_file, fourcc, 14.0, (dim,dim*2))
+
+                if saving_i > 0:
+                    
+                    #Save frame
+                    out.write(vis_iamge)
+
+                    saving_i -= 1   
+                    if saving_i == 0:
+                        out.release()                            
+
+                
 
     return 0
 

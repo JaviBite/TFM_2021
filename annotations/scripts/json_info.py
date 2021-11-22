@@ -38,15 +38,20 @@ def main():
 
     # Get the full actions
     actions = {}
+    roi_count = 0
     for tag, value in zip(data['metadata'], data['metadata'].values()):
 
-        action = str(value['av']['1'])
-
-        if action in actions.keys():
-            actions[action] += 1
+        if '2' in value['av']:
+            roi_count += 1
         else:
-            actions[action]  = 1
+            action = str(value['av']['1'])
 
+            if action in actions.keys():
+                actions[action] += 1
+            else:
+                actions[action]  = 1
+            
+    print("ROI Count: ", roi_count)
     if sort_mode == 'frec':
         actions = dict(sorted(actions.items(), reverse=reverse_order, key=lambda item: item[1]))
     elif sort_mode == 'alph':
