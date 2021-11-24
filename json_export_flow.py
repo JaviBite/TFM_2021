@@ -774,7 +774,7 @@ def main():
                             sequence.append(flowFB) 
 
                             if DATA_AUGMENTATION:
-                                sequence.append(flowFB_flip) 
+                                sequence_aug.append(flowFB_flip) 
 
                         frame_i =  frame_i + 1
                     
