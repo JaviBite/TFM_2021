@@ -1,2 +1,5 @@
 accion poner sin cacerolas ni sartenes:
 poner (?!olla|sarten|cazo)
+
+
+remover,poner (?!olla|sarten|cazo),voltear,^(?!cortar|remover|poner|interaccion|poner|voltear)

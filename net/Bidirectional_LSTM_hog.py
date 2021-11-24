@@ -40,7 +40,7 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
     model = Sequential()
     model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
     model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout, \
-                             activity_regularizer = l1(0.01))))# \
+                             activity_regularizer = l1(0.001))))# \
                              #kernel_regularizer=l2(0.001), recurrent_regularizer=l2(0.001), bias_regularizer=l2(0.001))))
     model.add(Dropout(dropouts[1]))
     model.add(Flatten())
@@ -120,7 +120,7 @@ def main():
     lstm_units = [32] * SPLITS
     rec_drop = [0.3] * SPLITS
     lstm_act = ['tanh'] * SPLITS
-    lstm_rec_act = ['hard_sigmoid'] * SPLITS
+    lstm_rec_act = ['sigmoid'] * SPLITS
     final_act = ['softmax'] * SPLITS
     hidden_act = ['sigmoid'] * SPLITS
     dropouts = [[0.5,0.4,0.3]] * SPLITS
@@ -131,10 +131,12 @@ def main():
     losses = ['categorical_crossentropy'] * SPLITS
     epochs = [30] * SPLITS
     
-    to_vis = ['regularicer','rec_drop']
+    to_vis = ['lstm_rec_act','hidden_act']
 
-    BATCH_SIZE = 10
+    BATCH_SIZE = 5
     i = 0
+    
+    best_acc = 0
 
     # Define the K-fold Cross Validator
     kfold = StratifiedKFold(n_splits=SPLITS, shuffle=True)
@@ -194,12 +196,17 @@ def main():
         i += 1
         
         valX, valy = X[val], y[val]
+        
+        loss, acc = model.evaluate(valX, valy, verbose=0)
+        print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
+        
+        if acc > best_acc:
+            model.save('out_model_bilstm.h5')
+            best_acc = acc
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
     json.dump(models_metrics, out_file, indent=1)
-
-    model.save('out_model_bilstm.h5')
 
     # evaluate LSTM
     #X, y = get_sequences(100, n_timesteps, size_elem)
