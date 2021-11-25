@@ -298,4 +298,4 @@ class FlowGenerator(Sequence) :
     batch_X, batch_y = np.array(batch_X), np.array(batch_y)
     #print(batch_X.shape, batch_y.shape)
 
-    return batch_X, batch_y
+    return batch_X, batch_y, fragments

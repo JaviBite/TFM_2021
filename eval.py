@@ -168,7 +168,7 @@ def main():
 
     out_folder = "out_hogs"
     for i in range(len(bad_samples)):
-        if bad_samples[i] and yhat_argmax[i] == 1 and y_argmax[i] == 3:
+        if bad_samples[i]:# and yhat_argmax[i] == 1 and y_argmax[i] == 3:
 
             predicted = class_labels[yhat_argmax[i]]
             true_label = class_labels[y_argmax[i]]

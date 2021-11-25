@@ -8,11 +8,13 @@ from cv_scripts.libs.mi_hog import normalize
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-from keras.models import Sequential
+from keras.models import Sequential, Model
 from keras.losses import categorical_crossentropy as cc
 from keras.regularizers import l1, l2, l1_l2
 from keras.layers import LSTM
+
 from keras.layers import Dense, Dropout, Flatten
+from keras import layers
 from keras.layers import TimeDistributed
 from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
@@ -37,6 +39,48 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
 
     return model
 
+def create_ConvModel(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis, regu):
+
+    inp = layers.Input(shape=input_shape)
+
+    x = layers.Dropout(dropouts[0])(inp)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(5, 5),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(3, 3),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(1, 1),
+        padding="same",
+        #return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = Flatten()(x)
+
+    x = layers.Dropout(dropouts[1])(x)
+    x = layers.Dense(hidden_dense_untis, activation= hidden_act)(x)
+    x = layers.Dropout(dropouts[2])(x)
+    x = layers.Dense(num_classes, activation= final_act)(x)
+
+    # Next, we will build the complete model and compile it.
+    model = Model(inp, x)
+
+    return model
+
 def main():
 
     BATCH_SIZE = 1
@@ -44,8 +88,8 @@ def main():
     json_filename = "../../BSH_firsthalf_0.2_pots_changes_nogit.json"
     labels = ["remover","poner (?!olla|sarten|cazo)","voltear","^(?!cortar|remover|poner|interaccion|poner|voltear)"]
 
-    full_generator = FlowGenerator(json_filename, labels, BATCH_SIZE, dimension=250, padding=20, flatten=True,
-        frames_sample=40, augmentation=False, balance=True, random_order=False, disbalance_factor=30, max_segments=999)
+    full_generator = FlowGenerator(json_filename, labels, BATCH_SIZE, dimension=100, padding=20, flatten=False,
+        frames_sample=25, augmentation=False, balance=True, random_order=False, disbalance_factor=30, max_segments=999)
 
     trainGenerator, testGenerator, valGenerator = full_generator.get_splits()
 
@@ -54,9 +98,9 @@ def main():
     # define problem
     n_timesteps =  sampleX.shape[1]
     n_sequences =  sampleX.shape[0]
-    n_features = sampleX.shape[2]
+    n_features = sampleX.shape[2:]
 
-    INPUT_SHAPE = (n_timesteps, n_features)
+    INPUT_SHAPE = (n_timesteps, n_features[0], n_features[1], n_features[2])
 
     SPLITS = 5
     
@@ -88,7 +132,7 @@ def main():
     #for train, val in kfold.split(X, labels):
     for i in range(SPLITS):
 
-        model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
+        model = create_ConvModel(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
                             lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i])
         opt = get(optimizers[i])
         opt.learning_rate = lr[i]
@@ -102,8 +146,7 @@ def main():
         start = time.time()
         
         history = model.fit_generator(generator=trainGenerator,
-                    validation_data=valGenerator, epochs=epochs[i], verbose=1, shuffle=True, callbacks=[es, reduce_lr],
-                    use_multiprocessing=True, workers=4)
+                    validation_data=valGenerator, epochs=epochs[i], verbose=1, shuffle=True, callbacks=[es, reduce_lr])
 
         end = time.time()
         hours, rem = divmod(end-start, 3600)
