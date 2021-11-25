@@ -1,5 +1,5 @@
 
-from flowGenerator import FlowGenerator
+from flowLoader import FlowLoader
 
 import time, json, numpy as np
 
@@ -82,6 +82,19 @@ def create_ConvModel(num_classes, input_shape, lstm_units, rec_dropout, lstm_act
     return model
 
 def main():
+
+    BATCH_SIZE = 1
+    N_CLASSES = 4
+    json_filename = "../../out_datasets/flow"
+    labels = ["stir","add","flip","others"]
+
+    full_generator = FlowLoader(json_filename, labels, BATCH_SIZE)
+
+    print(len(full_generator))
+
+    print(full_generator[0])
+
+def main2():
 
     BATCH_SIZE = 1
     N_CLASSES = 4
