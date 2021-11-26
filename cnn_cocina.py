@@ -22,7 +22,7 @@ img_dim = 15
 hog_dirs = 9
 input_shape = (img_dim,img_dim,hog_dirs,1) # Number of inputs for the neural network
 
-path = 'D:\\GI Lab\\Pruebas_acc_v2\\'
+path = 'D:\\Miguel\\out_flow\\'
 file = 'out_flow_f8_mf500'
 
 out_file = path+'results'+file[8:]+'.txt'
