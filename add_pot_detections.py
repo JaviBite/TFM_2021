@@ -105,7 +105,7 @@ def detect_pots_det_n(cap, init_frame, n_frames, coco_pred):
     return total_pots
 
 # Return the time in seconds where the pot is ready to be dettected
-MOTION_ACTION_REG = "poner (olla|sarten)|quitar (olla|sarten)|^mover (olla|sarten)"
+MOTION_ACTION_REG = "poner (olla|sarten|cazo)|quitar (olla|sarten|cazo)|^mover (olla|sarten|cazo)"
 def get_motion_fragments(data):
 
     fragments = {}

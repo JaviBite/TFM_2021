@@ -1,2 +1,8 @@
 accion poner sin cacerolas ni sartenes:
-poner (?!olla|sarten)
+poner (?!olla|sarten|cazo)
+
+
+remover,poner (?!olla|sarten|cazo),voltear,^(?!cortar|remover|poner|interaccion|poner|voltear)
+
+
+eval.py out_datasets/40-4_p20_d250_c_test.npz ../models/bilstm_fulldataset_pots_changes/out_model_bilstm.h5 -hog ../models/bilstm_fulldataset_pots_changes/out_model_metrics.json BSH_firsthalf_0.2_pots_changes_nogit.json

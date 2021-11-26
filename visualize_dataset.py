@@ -53,6 +53,13 @@ def main():
     files = np.load(file1, allow_pickle=True)
     X, labels = files['a'], files['b']
 
+    jsondata = sys.argv[2]
+    with open(jsondata) as json_file:
+        data = json.load(json_file)
+    
+    videoPaths = data['file']
+    local_path = data['config']['file']['loc_prefix']['1'][8:]
+
     N_CLASSES = np.max(labels) + 1
     N_SAMPLES = X.shape[0]
     N_TIMESTEPS = X.shape[1]
@@ -61,11 +68,15 @@ def main():
     HOG_W = X.shape[3]
     ORIENTATIONS = X.shape[4]
 
-    metadata_file = file1.split('.')[0] + "_metadata.json"
+    metadata_file = file1.rsplit('_', maxsplit=1)[0] + "_metadata.json"
     metadata_in = open(metadata_file,)
     metadata = json.load(metadata_in)
 
     class_labels = metadata['classes']
+    metadata_train_samples = metadata['samples_train']
+
+    acc = int(metadata['config']['accomulation'])
+    seg_frames = int(metadata['config']['seg_frames'])
 
     y = []
     
@@ -86,21 +97,66 @@ def main():
     #Visualizing
     for row_i in range(N_SAMPLES):
 
-        for hog_i in range(N_TIMESTEPS):
+        print(metadata_train_samples[row_i])
+
+        initFrame, finalFrame = metadata_train_samples[row_i]['frames']
+        initFrame = initFrame - seg_frames
+        finalFrame = finalFrame - seg_frames
+
+        vid = str(metadata_train_samples[row_i]['vid'])
+        vidPath = local_path + videoPaths[vid]['fname']
             
-            hog = X[row_i,hog_i,:,:,:]
-            hog_image = get_hog_image(hog, (16,16))
-
-            hog_image = hog_image / np.max(hog_image)
-
-            class_label = str(class_labels[labels[row_i]])
-            (w, h), _ = cv2.getTextSize(str(row_i), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 1)
-            hog_image = img = cv2.rectangle(hog_image, (0, 0), (w + 2, 10), (255,255,255), -1)
-            hog_image = cv2.putText(hog_image, str(row_i), (2, 8), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,0), 1)
-            cv2.imshow('HOG: ' + class_label ,hog_image.astype('float32'))
-            cv2.waitKey(20)
+        class_label = str(class_labels[labels[row_i]])
         
-        cv2.waitKey(100)
+        roi = metadata_train_samples[row_i]['roi']
+        x1, y1, x2, y2 = roi
+        roi_window = [slice(y1,y1+y2), slice(x1,x1+x2)]
+
+        #Open video
+        cap = cv2.VideoCapture(vidPath)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, initFrame)
+
+        frames = []
+        frame_i = initFrame
+        while cap.isOpened() and frame_i <= finalFrame:
+            ret, frame = cap.read()
+            roi_frame = frame[roi_window]
+            frames.append(roi_frame)
+            frame_i += 1
+
+        next = False
+        frame_i = 0
+        acc_i = 0
+        hog_i = 0
+        while not next:
+
+            frame = frames[frame_i]
+            cv2.imshow('ROI: ' + class_label ,frame)
+
+            frame_i = (frame_i + 1) % len(frames)
+            acc_i += 1
+
+            if acc_i % acc == 0:
+                acc_i = 0
+                hog_i = (hog_i + 1) % N_TIMESTEPS
+
+                hog_i = (hog_i + 1) % N_TIMESTEPS
+                hog = X[row_i,hog_i,:,:,:]
+                hog_image = get_hog_image(hog, (16,16))
+
+                hog_image = hog_image / np.max(hog_image)
+
+                (w, h), _ = cv2.getTextSize(str(row_i), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 1)
+                hog_image = img = cv2.rectangle(hog_image, (0, 0), (w + 2, 10), (255,255,255), -1)
+                hog_image = cv2.putText(hog_image, str(row_i), (2, 8), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,0), 1)
+                cv2.imshow('HOG: ' + class_label ,hog_image.astype('float32'))
+
+            key = cv2.waitKey(20)
+
+            if key == ord('n'):
+                next = True
+
+        
 
 
 if __name__ == "__main__":

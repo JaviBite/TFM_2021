@@ -1,31 +1,20 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Feb 24 09:34:36 2020
 
-@author: cvlab
-"""
-import sys
-from random import random
-import json, time
+from flowLoader import FlowLoader
 
-from numpy import array
-from numpy import cumsum
-from numpy import array_equal
-import numpy as np
-
-import sys
-sys.path.append("..")
+import time, json, numpy as np
 
 from cv_scripts.libs.mi_hog import normalize
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-from keras.models import Sequential
+from keras.models import Sequential, Model
 from keras.losses import categorical_crossentropy as cc
 from keras.regularizers import l1, l2, l1_l2
 from keras.layers import LSTM
+
 from keras.layers import Dense, Dropout, Flatten
+from keras import layers
 from keras.layers import TimeDistributed
 from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
@@ -40,7 +29,7 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
     model = Sequential()
     model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
     model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout, \
-                             activity_regularizer = l1(0.001))))# \
+                             activity_regularizer = l1(0.01))))# \
                              #kernel_regularizer=l2(0.001), recurrent_regularizer=l2(0.001), bias_regularizer=l2(0.001))))
     model.add(Dropout(dropouts[1]))
     model.add(Flatten())
@@ -50,77 +39,92 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
 
     return model
 
+def create_ConvModel(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis, regu):
+
+    inp = layers.Input(shape=input_shape)
+
+    x = layers.Dropout(dropouts[0])(inp)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(5, 5),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(3, 3),
+        padding="same",
+        return_sequences=True,
+        activation=lstm_act,
+    )(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=64,
+        kernel_size=(1, 1),
+        padding="same",
+        #return_sequences=True,
+        activation=lstm_act,
+    )(x)
+
+    x = Flatten()(x)
+
+    x = layers.Dropout(dropouts[1])(x)
+    x = layers.Dense(hidden_dense_untis, activation= hidden_act)(x)
+    x = layers.Dropout(dropouts[2])(x)
+    x = layers.Dense(num_classes, activation= final_act)(x)
+
+    # Next, we will build the complete model and compile it.
+    model = Model(inp, x)
+
+    return model
+
+def main_test():
+
+    BATCH_SIZE = 1
+    N_CLASSES = 4
+    json_filename = "../../out_datasets/flow"
+    labels = ["stir","add","flip","others"]
+
+    full_generator = FlowLoader(json_filename, labels, BATCH_SIZE)
+
+    print(len(full_generator))
+
+    print(full_generator[0])
+
 def main():
-    # Load data
-    file1 = sys.argv[1]
-    files = np.load(file1, allow_pickle=True)
-    X, labels = files['a'], files['b']
 
-    if '_train' in file1:
-        metadata_file = file1.rsplit('.',maxsplit=1)[0][:-6] + "_metadata.json"
-    else:
-        metadata_file = file1.rsplit('.',maxsplit=1)[0] + "_metadata.json"
-    metadata_in = open(metadata_file,)
-    metadata = json.load(metadata_in)
+    BATCH_SIZE = 1
+    N_CLASSES = 4
+    flow_folder = "../../out_datasets/flow"
+    labels = ["stir","add","flip","others"]
 
-    class_labels = metadata['classes']
+    train_folder = flow_folder + "/train"
+    test_folder = flow_folder + "/test"
+    val_folder = flow_folder + "/val"
 
-    N_CLASSES = np.max(labels) + 1
-    N_SAMPLES = X.shape[0]
-    N_TIMESTEPS = X.shape[1]
+    train_generator = FlowLoader(train_folder, labels, BATCH_SIZE)
+    test_generator = FlowLoader(test_folder, labels, BATCH_SIZE)
+    val_generator = FlowLoader(val_folder, labels, BATCH_SIZE)
 
-    HOG_H = X.shape[2]
-    HOG_W = X.shape[3]
-    ORIENTATIONS = X.shape[4]
-
-    # Normalice
-    X_norm = []
-    for row in range(N_SAMPLES):
-        add_samples = []
-        for sample in range(N_TIMESTEPS):
-            ortientation_hist = X[row,sample,:,:,:]
-            normalized_hist = normalize(ortientation_hist)
-            add_samples.append(normalized_hist)
-        X_norm.append(np.array(add_samples))
-
-    X_norm = np.array(X_norm)
-    X = X_norm
-    
-    # Ravel features into an array
-    #X = X.reshape(N_SAMPLES,N_TIMESTEPS,HOG_H*HOG_W*ORIENTATIONS)
-    y = []
-    
-    count_classes = [0] * N_CLASSES
-    for yi in labels:
-        to_append = np.zeros(N_CLASSES)
-        to_append[yi] = 1
-        count_classes[yi] += 1
-        y.append(to_append)
-        
-    print("Count classes:",count_classes)
-
-    y = np.array(y).reshape((len(labels), N_CLASSES))
-
-    print("X Shape: ", X.shape)
-    print("Y Shape: ", y.shape)
-
-    val_percent = 0.2
-    trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
-
+    sampleX, _ = train_generator[0]
+    print(sampleX.shape)
     # define problem
-    n_timesteps =  X.shape[1]
-    n_sequences =  X.shape[0]
-    n_features = X.shape[2]
+    n_timesteps =  sampleX.shape[1]
+    n_sequences =  sampleX.shape[0]
+    n_features = sampleX.shape[2:]
 
-    INPUT_SHAPE = (n_timesteps, n_features)
-    
+    INPUT_SHAPE = (n_timesteps, n_features[0], n_features[1], n_features[2])
+
     SPLITS = 5
     
     lr = [0.001] * SPLITS
     lstm_units = [32] * SPLITS
     rec_drop = [0.3] * SPLITS
     lstm_act = ['tanh'] * SPLITS
-    lstm_rec_act = ['sigmoid'] * SPLITS
+    lstm_rec_act = ['hard_sigmoid'] * SPLITS
     final_act = ['softmax'] * SPLITS
     hidden_act = ['sigmoid'] * SPLITS
     dropouts = [[0.5,0.4,0.3]] * SPLITS
@@ -131,23 +135,20 @@ def main():
     losses = ['categorical_crossentropy'] * SPLITS
     epochs = [30] * SPLITS
     
-    to_vis = ['lstm_rec_act','hidden_act']
-
-    BATCH_SIZE = 5
+    to_vis = ['regularicer','rec_drop']
     i = 0
-    
-    best_acc = 0
 
     # Define the K-fold Cross Validator
-    kfold = StratifiedKFold(n_splits=SPLITS, shuffle=True)
+    #kfold = StratifiedKFold(n_splits=SPLITS, shuffle=True)
 
     # K-fold Cross Validation model evaluation
     fold_no = 1
     model = None
     models_metrics = []
-    for train, val in kfold.split(X, labels):
+    #for train, val in kfold.split(X, labels):
+    for i in range(SPLITS):
 
-        model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
+        model = create_ConvModel(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
                             lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i])
         opt = get(optimizers[i])
         opt.learning_rate = lr[i]
@@ -159,8 +160,10 @@ def main():
         reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
 
         start = time.time()
-        history = model.fit(X[train], y[train], validation_data=(X[val], y[val]), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                                callbacks=[es, reduce_lr], shuffle=True, verbose=1)
+        
+        history = model.fit_generator(generator=train_generator,
+                    validation_data=val_generator, epochs=epochs[i], verbose=1, shuffle=True, callbacks=[es, reduce_lr])
+
         end = time.time()
         hours, rem = divmod(end-start, 3600)
         minutes, seconds = divmod(rem, 60)
@@ -194,26 +197,19 @@ def main():
         models_metrics.append({'model': model_json, 'history': metrics, 'etime': elapsed_time, 'vis':to_vis})
         
         i += 1
-        
-        valX, valy = X[val], y[val]
-        
-        loss, acc = model.evaluate(valX, valy, verbose=0)
-        print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
-        
-        if acc > best_acc:
-            model.save('out_model_bilstm.h5')
-            best_acc = acc
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
     json.dump(models_metrics, out_file, indent=1)
 
+    model.save('out_model_bilstm.h5')
+
     # evaluate LSTM
     #X, y = get_sequences(100, n_timesteps, size_elem)
-    loss, acc = model.evaluate(valX, valy, verbose=0)
+    loss, acc = model.evaluate_generator(val_generator, verbose=1)
     print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
 
-    predict_x=model.predict(valX) 
+    predict_x=model.predict_generator(val_generator, verbose=1)
     yhat=np.round(predict_x,decimals=0)
 
     fig, axs = pyplot.subplots(2, 1, constrained_layout=True)
@@ -233,17 +229,22 @@ def main():
 
 
     # Confusion matrix
-    matrix = confusion_matrix(valy.argmax(axis=1), predict_x.argmax(axis=1), normalize='true')
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=class_labels)
+    y_true = [np.argmax(val_generator[i][1], axis=1) for i in range(BATCH_SIZE)]
+
+    matrix = confusion_matrix(
+    np.concatenate(y_true),    
+    np.argmax(model.predict_generator(val_generator, steps=BATCH_SIZE), axis=1), normalize='true')
+
+    disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=labels)
     disp.plot()
     
     pyplot.show()
 
     # Loss histogram
     losses = []
-    for i in range(len(valX)):
-        losses.append(cc(valy[i], yhat[i]))
+    for i in range(len(yhat)):
+        losses.append(cc(y_true[i], yhat[i]))
 
     fig, axs = pyplot.subplots(1, 1, constrained_layout=True)
     axs.hist(losses)
@@ -253,5 +254,6 @@ def main():
     
     pyplot.show()
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()
