@@ -43,11 +43,6 @@ def main():
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
-    for label in labels_alt:
-        dir = out_dir + "/" + label
-        if not os.path.exists(dir):
-            os.makedirs(dir)
-
     full_generator = FlowGenerator(json_filename, labels, BATCH_SIZE, dimension=100, padding=20, flatten=False,
         frames_sample=25, augmentation=False, balance=True, random_order=False, disbalance_factor=30, max_segments=999)
 
@@ -64,6 +59,11 @@ def main():
 
         if not os.path.exists(this_out_dir):
             os.makedirs(this_out_dir)
+
+        for label in labels_alt:
+            dir = this_out_dir + "/" + label
+            if not os.path.exists(dir):
+                os.makedirs(dir)
 
         metadata = []
         for i in range(len(generators[idx])):

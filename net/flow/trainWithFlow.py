@@ -98,15 +98,18 @@ def main2():
 
     BATCH_SIZE = 1
     N_CLASSES = 4
-    json_filename = "../../BSH_firsthalf_0.2_pots_changes_nogit.json"
-    labels = ["remover","poner (?!olla|sarten|cazo)","voltear","^(?!cortar|remover|poner|interaccion|poner|voltear)"]
+    flow_folder = "../../out_datasets/flow"
+    labels = ["stir","add","flip","others"]
 
-    full_generator = FlowGenerator(json_filename, labels, BATCH_SIZE, dimension=100, padding=20, flatten=False,
-        frames_sample=25, augmentation=False, balance=True, random_order=False, disbalance_factor=30, max_segments=999)
+    train_folder = flow_folder + "/train"
+    test_folder = flow_folder + "/test"
+    val_folder = flow_folder + "/val"
 
-    trainGenerator, testGenerator, valGenerator = full_generator.get_splits()
+    train_generator = FlowLoader(train_folder, labels, BATCH_SIZE)
+    test_generator = FlowLoader(test_folder, labels, BATCH_SIZE)
+    val_generator = FlowLoader(val_folder, labels, BATCH_SIZE)
 
-    sampleX, _ = trainGenerator[0]
+    sampleX, _ = train_generator[0]
     print(sampleX.shape)
     # define problem
     n_timesteps =  sampleX.shape[1]
@@ -158,8 +161,8 @@ def main2():
 
         start = time.time()
         
-        history = model.fit_generator(generator=trainGenerator,
-                    validation_data=valGenerator, epochs=epochs[i], verbose=1, shuffle=True, callbacks=[es, reduce_lr])
+        history = model.fit_generator(generator=train_generator,
+                    validation_data=val_generator, epochs=epochs[i], verbose=1, shuffle=True, callbacks=[es, reduce_lr])
 
         end = time.time()
         hours, rem = divmod(end-start, 3600)
@@ -203,10 +206,10 @@ def main2():
 
     # evaluate LSTM
     #X, y = get_sequences(100, n_timesteps, size_elem)
-    loss, acc = model.evaluate_generator(valGenerator, verbose=1)
+    loss, acc = model.evaluate_generator(val_generator, verbose=1)
     print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
 
-    predict_x=model.predict_generator(valGenerator, verbose=1)
+    predict_x=model.predict_generator(val_generator, verbose=1)
     yhat=np.round(predict_x,decimals=0)
 
     fig, axs = pyplot.subplots(2, 1, constrained_layout=True)
@@ -227,11 +230,11 @@ def main2():
 
     # Confusion matrix
 
-    y_true = [np.argmax(valGenerator[i][1], axis=1) for i in range(BATCH_SIZE)]
+    y_true = [np.argmax(val_generator[i][1], axis=1) for i in range(BATCH_SIZE)]
 
     matrix = confusion_matrix(
     np.concatenate(y_true),    
-    np.argmax(model.predict_generator(valGenerator, steps=BATCH_SIZE), axis=1), normalize='true')
+    np.argmax(model.predict_generator(val_generator, steps=BATCH_SIZE), axis=1), normalize='true')
 
     disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=labels)
     disp.plot()
