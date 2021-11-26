@@ -81,7 +81,7 @@ def create_ConvModel(num_classes, input_shape, lstm_units, rec_dropout, lstm_act
 
     return model
 
-def main():
+def main_test():
 
     BATCH_SIZE = 1
     N_CLASSES = 4
@@ -94,7 +94,7 @@ def main():
 
     print(full_generator[0])
 
-def main2():
+def main():
 
     BATCH_SIZE = 1
     N_CLASSES = 4
