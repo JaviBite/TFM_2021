@@ -62,8 +62,6 @@ class FlowLoader(Sequence) :
     for idx in range(idx * self.batch_size, (idx + 1) * self.batch_size):
         file, y = self.data[idx]
 
-        print(file)
-        print(y)
         x = np.load(file, allow_pickle=True)['a']
         if self.flatten:
             x = x.flatten()
@@ -73,6 +71,5 @@ class FlowLoader(Sequence) :
 
     batch_X, batch_y = np.array(batch_X), np.array(batch_y)
     batch_X = batch_X.reshape(self.batch_size, batch_X.shape[2], batch_X.shape[3],batch_X.shape[4],batch_X.shape[5])
-    print(batch_X.shape, batch_y.shape)
 
     return batch_X, batch_y
