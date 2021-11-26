@@ -76,12 +76,12 @@ def main():
             metadata.append(meta[0])
 
             pbar.update(1)
-        
-        pbar.close()
 
-        metadata_out = open(out_dir + "/metadata.json", "w")
+        metadata_out = open(this_out_dir + "/metadata.json", "w")
         json.dump(metadata, metadata_out, indent=1)
         metadata_out.close()
+        
+    pbar.close()
 
 
 if __name__ == '__main__':
