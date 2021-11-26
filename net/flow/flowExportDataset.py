@@ -36,6 +36,9 @@ def main():
     labels_alt = ["stir","add","flip","others"]
 
     out_dir = "../../out_datasets/flow"
+    out_dir_test = out_dir + "/test"
+    out_dir_val = out_dir + "/val"
+    out_dir_train = out_dir + "/train"
 
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -48,29 +51,37 @@ def main():
     full_generator = FlowGenerator(json_filename, labels, BATCH_SIZE, dimension=100, padding=20, flatten=False,
         frames_sample=25, augmentation=False, balance=True, random_order=False, disbalance_factor=30, max_segments=999)
 
-    #trainGenerator, testGenerator, valGenerator = full_generator.get_splits()
+    trainGenerator, testGenerator, valGenerator = full_generator.get_splits()
 
     #prgress bar
     pbar = tqdm(total=len(full_generator))
 
-    metadata = []
-    for i in range(10):
-        sample_x, sample_y, meta = full_generator[i]
+    out_dirs = [out_dir_test, out_dir_val, out_dir_train]
+    generators = [trainGenerator, testGenerator, valGenerator]
+    for idx in range(len(generators)):
 
-        label = labels_alt[np.argmax(sample_y)]
-        file  = out_dir + "/" + label + "/" f'{i:010d}' + ".npz"
+        this_out_dir = out_dirs[idx]
 
-        np.savez(file, a=sample_x)
+        if not os.path.exists(this_out_dir):
+            os.makedirs(this_out_dir)
 
-        metadata.append(meta[0])
+        metadata = []
+        for i in range(len(generators[idx])):
+            sample_x, sample_y, meta = full_generator[i]
 
-        pbar.update(1)
-    
-    pbar.close()
+            label = labels_alt[np.argmax(sample_y)]
+            file  = this_out_dir + "/" + label + "/" f'{i:010d}' + ".npz"
 
-    metadata_out = open(out_dir + "/metadata.json", "w")
-    json.dump(metadata, metadata_out, indent=1)
-    metadata_out.close()
+            np.savez(file, a=sample_x)
+            metadata.append(meta[0])
+
+            pbar.update(1)
+        
+        pbar.close()
+
+        metadata_out = open(out_dir + "/metadata.json", "w")
+        json.dump(metadata, metadata_out, indent=1)
+        metadata_out.close()
 
 
 if __name__ == '__main__':
