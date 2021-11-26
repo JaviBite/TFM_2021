@@ -51,7 +51,7 @@ def main():
     #prgress bar
     pbar = tqdm(total=len(full_generator))
 
-    out_dirs = [out_dir_test, out_dir_val, out_dir_train]
+    out_dirs = [out_dir_train, out_dir_test, out_dir_val]
     generators = [trainGenerator, testGenerator, valGenerator]
     for idx in range(len(generators)):
 
