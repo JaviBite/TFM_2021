@@ -448,27 +448,7 @@ def main():
             if len(elem['z']) == 2:
                 fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vid':vid ,'vpath':videoPath, 'class':elem['match']})
 
-    if random_order:
-        random.shuffle(fragments)
-
-    # Initialize coco predictor
-    from detectron2 import model_zoo
-    from detectron2.config import get_cfg
-    from detectron2.engine import DefaultPredictor
-
-    CONFIG_COCO = model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
-    MODEL_COCO = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
-    SCORE_THRESH_TEST = 0.2
-
-    cfg_coco = get_cfg()
-    cfg_coco.merge_from_file(CONFIG_COCO)
-    cfg_coco.MODEL.DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-    cfg_coco.MODEL.ROI_HEADS.SCORE_THRESH_TEST = SCORE_THRESH_TEST  # set threshold for this model
-    cfg_coco.MODEL.WEIGHTS = MODEL_COCO
-    coco_predictor = DefaultPredictor(cfg_coco)
-
-    total_fragments = len(fragments) if max_out_frags is None else max_out_frags
-
+    balanced_fragments = []
     if args.balance:
         print("Classifing fragments in ", len(words), "classes...")
         # Stack of fragments
@@ -483,44 +463,59 @@ def main():
         for ind in range(len(class_stacks)):
             print(words[ind], " -> ", len(class_stacks[ind]))
 
+        # Get the minimum number of fragments
+        min_fragments = min([len(x) for x in class_stacks])
+        min_fragments += 30
+
+        if max_out_frags is not None:
+            min_fragments = min(min_fragments, int(max_out_frags/len(words)))
+
+        # Add balanced fragments
+        for ind in range(len(class_stacks)):
+            stack = class_stacks[ind]
+            balanced_fragments.extend(stack[:min(min_fragments,len(stack))])
+    else:
+        if max_out_frags is not None:
+            fragments = fragments[:max_out_frags]
+
+    fragments = balanced_fragments if args.balance else fragments
+
+    if random_order:
+        random.shuffle(fragments)
+
+    stratify_y = []
+    for elem in fragments:
+        stratify_y.append(elem['class'])
+
+    train_fragments, test_fragments = train_test_split(fragments, test_size=args.split, random_state=RANDOM_STATE ,stratify=stratify_y)
+
+    total_fragments = len(train_fragments) + len(test_fragments)  
+
 
     disbalance_count = 0
     count_classes = np.zeros(len(words))
     t = tqdm(total=total_fragments)
-    X = []
-    y = []
-    metasamples = []
+    Xtrain = []
+    ytrain = []
+    Xtest = []
+    ytest = []
+    metasamples_test = []
+    metasamples_train = []
 
     frag_i = 0
     no_flow_counter = 0
     # LOOP AROUND FRAGMENTS
-    while frag_i < len(fragments):
+    while frag_i < total_fragments:
 
         try:
-            
-            # Select fragment (sequential or from stack if balance)
-            if args.balance:
-                
-                #Check the minimun class
-                min_class_id = np.argmin(count_classes[fragments_left])
-                if len(class_stacks[min_class_id]) > 0:
-                    frag = class_stacks[min_class_id].pop()
-                else:
-                    fragments_left[min_class_id] = False
-                    disbalance_count = disbalance_count + 1
 
-                    frag_i -= 1
-                    continue
-                
-                if disbalance_count > 0:
-                    disbalance_count = disbalance_count + 1
-
-                if disbalance_count > 5:
-                    print("Stopping to avoid disbalance over 30...")
-                    break
-            
+            is_test = False
+            if frag_i >= len(train_fragments):
+                # TEST
+                is_test = True
+                frag = test_fragments[frag_i - len(train_fragments)]
             else:
-                frag = fragments[frag_i]
+                frag = train_fragments[frag_i]
             
             # Create a VideoCapture object and some useful data
             vid = frag['vid']
@@ -678,7 +673,7 @@ def main():
                         #Normalize flow
                         #TODO
 
-                        if DATA_AUGMENTATION:
+                        if DATA_AUGMENTATION and not is_test:
                             roi_flip_frame = cv2.flip(roi_frame, 1)
                             last_gray_frames_flip[0] = last_gray_frames_flip[1]
                             last_gray_frames_flip[1] = roi_flip_frame
@@ -697,12 +692,12 @@ def main():
                         if not DO_JUST_FLOW:
                             if flow_count == 0:
                                 flow = CTTE * flowFB
-                                if DATA_AUGMENTATION:
+                                if DATA_AUGMENTATION and not is_test:
                                     flow_flip = CTTE * flowFB_flip
 
                             else:
                                 flow += CTTE * flowFB
-                                if DATA_AUGMENTATION:
+                                if DATA_AUGMENTATION and not is_test:
                                     flow_flip += CTTE * flowFB_flip
                             
                             flow_count = flow_count + 1
@@ -746,7 +741,7 @@ def main():
                                 #print("hog shape: ", normalized_blocks.shape)
                                 sequence.append(normalized_blocks)  
 
-                                if DATA_AUGMENTATION:
+                                if DATA_AUGMENTATION and not is_test:
                                     roi_flow = flow_flip
                                     modulo, argumento, argumento2 = mi_gradiente(roi_flow)
                                     normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
@@ -773,7 +768,7 @@ def main():
                             
                             sequence.append(flowFB) 
 
-                            if DATA_AUGMENTATION:
+                            if DATA_AUGMENTATION and not is_test:
                                 sequence_aug.append(flowFB_flip) 
 
                         frame_i =  frame_i + 1
@@ -789,11 +784,11 @@ def main():
                 #print("len seq: ", len(sequence))
                 if not DO_JUST_FLOW and len(sequence) >= int(args.frames/FLOW_ACC):
                     sequence = sequence[:int(args.frames/FLOW_ACC)]
-                    if DATA_AUGMENTATION:
+                    if DATA_AUGMENTATION and not is_test:
                         sequence_aug = sequence_aug[:int(args.frames/FLOW_ACC)]
                 elif DO_JUST_FLOW and len(sequence) >= args.frames:
                     sequence = sequence[:args.frames]
-                    if DATA_AUGMENTATION:
+                    if DATA_AUGMENTATION and not is_test:
                         sequence_aug = sequence_aug[:args.frames]
                 else:
                     frag_i += 1
@@ -804,28 +799,27 @@ def main():
                 class_id = int(frag['class'])
                 count_classes[class_id] += 1
 
-                y.append(class_id)
-                X.append(np.array(sequence))
-                metasamples.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
+                if is_test:
+                    ytest.append(class_id)
+                    Xtest.append(np.array(sequence))
+                    metasamples_test.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
+                else:
+                    ytrain.append(class_id)
+                    Xtrain.append(np.array(sequence))
+                    metasamples_train.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
 
-                if DATA_AUGMENTATION:
-                    y.append(class_id)
-                    X.append(np.array(sequence_aug))
-                    metasamples.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 1})
+                    if DATA_AUGMENTATION and not is_test:
+                        ytrain.append(class_id)
+                        Xtrain.append(np.array(sequence_aug))
+                        metasamples_train.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 1})
 
                 frag_count = frag_count + 1
                 t.update()
-
-                if max_out_frags is not None and frag_count >= max_out_frags:
-                    break
 
             cv2.destroyAllWindows()
             cap.release()
             
             frag_i += 1
-
-            if max_out_frags is not None and frag_count >= max_out_frags:
-                    break
         
         except Exception as e:
             logging.error(traceback.format_exc())
@@ -836,18 +830,19 @@ def main():
 
     # Export final dataset file
 
-    y = np.array(y)
-    X = np.array(X)
+    ytrain = np.array(ytrain)
+    Xtrain = np.array(Xtrain)
 
-    Xtrain, Xtest, ytrain, ytest, metatrain, metatest = train_test_split(X, y, metasamples, test_size=args.split, random_state=RANDOM_STATE ,stratify=y)
+    ytest = np.array(ytest)
+    Xtest = np.array(Xtest)
 
     # Save dataset
     np.savez(out_file + "_train.npz", a=Xtrain, b=ytrain)
     np.savez(out_file + "_test.npz", a=Xtest, b=ytest)
 
     # Save meta data
-    metadata['samples_train'] = metatrain
-    metadata['samples_test'] = metatest
+    metadata['samples_train'] = metasamples_train
+    metadata['samples_test'] = metasamples_test
 
     metadata_out = open(metafile, "w")
     json.dump(metadata, metadata_out, indent=0)
