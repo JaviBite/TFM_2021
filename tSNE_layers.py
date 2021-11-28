@@ -87,7 +87,8 @@ if not feature_files:
 
         N_FEATURES = X_norm.shape[2]
 
-        matrix = np.empty((0,64+1))
+        #matrix = np.empty((0,128+1))
+        matrix = []
         for row_i in range(N_SAMPLES):
             hog_seq = X_norm[row_i,:]
             hog_seq = hog_seq.reshape(1,N_TIMESTEPS,N_FEATURES)
@@ -98,12 +99,13 @@ if not feature_files:
 
             features = np.array(layer_features).flatten()
             features = np.concatenate([[class_id],features])
-            features = features.reshape(1,features.shape[0])
+            #features = features.reshape(1,features.shape[0])
             # print(features.shape)
             # print(matrix.shape)
-            matrix = np.append(matrix, features, axis=0)
+            #matrix = np.append(matrix, features, axis=0)
+            matrix.append(features)
 
-        matrix = np.mat(matrix)
+        matrix = np.array(matrix)
         print(matrix.shape)
 
         np.savetxt("./out_features_" + layer + ".txt",matrix)
