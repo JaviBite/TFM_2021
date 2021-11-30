@@ -96,7 +96,7 @@ def main_test():
 
 def main():
 
-    BATCH_SIZE = 1
+    BATCH_SIZE = 4
     N_CLASSES = 4
     flow_folder = "../../out_datasets/flow"
     labels = ["stir","add","flip","others"]
