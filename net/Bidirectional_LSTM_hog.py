@@ -26,7 +26,7 @@ from keras.losses import categorical_crossentropy as cc
 from keras.regularizers import l1, l2, l1_l2
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
-from keras.layers import TimeDistributed
+from keras.layers import BatchNormalization
 from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import SGD, Adam, get
@@ -35,16 +35,17 @@ from sklearn.model_selection import KFold, StratifiedKFold
 
 from matplotlib import pyplot
 
-def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis, regu):
+def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis, regu, condition):
 
     model = Sequential()
     model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
     model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout, \
-                             activity_regularizer = l1(0.001))))# \
-                             #kernel_regularizer=l2(0.001), recurrent_regularizer=l2(0.001), bias_regularizer=l2(0.001))))
+                            kernel_regularizer=l1(regu))))
+    if condition:
+        model.add(BatchNormalization())
     model.add(Dropout(dropouts[1]))
     model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation = hidden_act, kernel_regularizer=l1(l1=0.001)))
+    model.add(Dense(hidden_dense_untis, activation = hidden_act, kernel_regularizer=l1(l1=regu)))
     model.add(Dropout(dropouts[2]))
     model.add(Dense(num_classes, activation = final_act))
 
@@ -117,21 +118,22 @@ def main():
     SPLITS = 5
     
     lr = [0.001] * SPLITS
-    lstm_units = [32] * SPLITS
-    rec_drop = [0.3] * SPLITS
+    lstm_units = [64]  * SPLITS
+    rec_drop = [0.2] * SPLITS
     lstm_act = ['tanh'] * SPLITS
     lstm_rec_act = ['sigmoid'] * SPLITS
     final_act = ['softmax'] * SPLITS
     hidden_act = ['sigmoid'] * SPLITS
     dropouts = [[0.5,0.4,0.3]] * SPLITS
     hidden_dense_untis = [64] * SPLITS
-    regularicer = [0.001] * SPLITS
+    regularicer = [0.0005] * SPLITS
+    condition = [True] * SPLITS
 
     optimizers = ['adam'] * SPLITS
     losses = ['categorical_crossentropy'] * SPLITS
     epochs = [30] * SPLITS
     
-    to_vis = ['lstm_rec_act','hidden_act']
+    to_vis = ['condition','regularicer']
 
     BATCH_SIZE = 5
     i = 0
@@ -148,15 +150,15 @@ def main():
     for train, val in kfold.split(X, labels):
 
         model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
-                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i])
+                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i], condition[i])
         opt = get(optimizers[i])
         opt.learning_rate = lr[i]
         model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
         #print(model.summary())
 
         # Early Estopping
-        es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
-        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=5)
+        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=1)
 
         start = time.time()
         history = model.fit(X[train], y[train], validation_data=(X[val], y[val]), epochs=epochs[i], batch_size=BATCH_SIZE, 
@@ -182,7 +184,8 @@ def main():
                     'optimizers': optimizers[i],
                     'losses': losses[i],
                     'epochs': epochs[i],
-                    'regularicer': regularicer[i]
+                    'regularicer': regularicer[i],
+                    'condition': condition[i]
         }
 
         metrics = history.history
