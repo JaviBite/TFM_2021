@@ -325,6 +325,8 @@ def main():
     ROI_DIM = 250
     DET_PAD = 0
 
+    FPS = 25
+
     FRAMES_PER_SEQ = 50
 
     RANDOM_STATE = 42
@@ -341,6 +343,7 @@ def main():
     parser.add_argument('-dim',"--dimension", type=int, default=ROI_DIM, help="Dimenson in pixels of the output square video")
     parser.add_argument('-f',"--frames", type=int, default=FRAMES_PER_SEQ, help="Frames per sequence")
     parser.add_argument('-acc',"--flow_accomulate", type=int, default=FLOW_ACC, help="Flows to acommulate before HOG processing")
+    parser.add_argument('-ms',"--max_segments", type=int, default=999, help="Max segments per fragment")
     parser.add_argument('-aug',"--augmentation", action="store_true", help="Add data augmentation flipping the frames")
     parser.add_argument('-b',"--balance", action="store_true", help="Force balance between all the classes")
     parser.add_argument('-w',"--window", type=float, default=1.0, help="Percetnage of new data for the new window of fragment.")
@@ -361,6 +364,8 @@ def main():
     DATA_AUGMENTATION = args.augmentation
 
     DO_JUST_FLOW = args.just_flow
+
+    MAX_SEGMENTS = args.max_segments
     
     file1 = args.json_dir
 
@@ -446,17 +451,26 @@ def main():
         videoPath = getVidPath(data1, localpath, str(vid)) 
         for elem in data:
             if len(elem['z']) == 2:
-                fragments.append({'time':elem['z'], 'act':elem['av']['1'], 'vid':vid ,'vpath':videoPath, 'class':elem['match']})
+
+                # Temporal segment if the fragment duration allows it
+                segments = int((elem['z'][1] - elem['z'][0]) / (args.frames / FPS)) # 25 fps
+                for i in range(min(segments, MAX_SEGMENTS)):
+                    if len(elem['xy']) == 0:
+                        fragments.append({
+                            'vid': vid,
+                            'vpath': videoPath,
+                            'time': [elem['z'][0] + i * (args.frames / FPS), elem['z'][0] + (i+1) * (args.frames / FPS)],
+                            'match': elem['match']
+                        })
 
     balanced_fragments = []
     if args.balance:
         print("Classifing fragments in ", len(words), "classes...")
         # Stack of fragments
         class_stacks = [[] for _ in range(len(words))]
-        fragments_left = [True] * len(words) 
 
         for frag in fragments:
-            class_id = frag['class']
+            class_id = frag['match']
             class_stacks[class_id].append(frag)
 
         print("Stacks:")
@@ -473,6 +487,8 @@ def main():
         # Add balanced fragments
         for ind in range(len(class_stacks)):
             stack = class_stacks[ind]
+            if random_order:
+                random.shuffle(stack)
             balanced_fragments.extend(stack[:min(min_fragments,len(stack))])
     else:
         if max_out_frags is not None:
@@ -480,20 +496,24 @@ def main():
 
     fragments = balanced_fragments if args.balance else fragments
 
-    if random_order:
-        random.shuffle(fragments)
-
     stratify_y = []
     for elem in fragments:
-        stratify_y.append(elem['class'])
+        stratify_y.append(elem['match'])
 
     train_fragments, test_fragments = train_test_split(fragments, test_size=args.split, random_state=RANDOM_STATE ,stratify=stratify_y)
 
     total_fragments = len(train_fragments) + len(test_fragments)  
 
+    class_frag_count = [0 for _ in range(len(words))]
+    for frag in fragments:
+            class_id = frag['match']
+            class_frag_count[class_id] += 1
+    
+    print("Total fragments per class:", class_frag_count)
 
-    disbalance_count = 0
+
     count_classes = np.zeros(len(words))
+    aug_count_classes = np.zeros(len(words)) 
     t = tqdm(total=total_fragments)
     Xtrain = []
     ytrain = []
@@ -536,10 +556,6 @@ def main():
             if final_frame - init_frame < args.frames:
                 frag_i += 1
                 continue
-            
-            # Some label data
-            action_noum = frag['act']
-            action = action_noum.split(" ")[0]
 
             # Set the initial frame
             cap.set(cv2.CAP_PROP_POS_FRAMES, init_frame)
@@ -636,197 +652,188 @@ def main():
                 cv2.waitKey(0)
             
             bad = False
-            # LOOP AROUND SLICES OF THE FRAGMENT
-            while (not debug and cap.isOpened() and total_final_frame - init_frame >= args.frames + 1 and not bad):
+            cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
+            ret, frame = cap.read()
+            frameflow1 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                cap.set(cv2.CAP_PROP_POS_FRAMES,init_frame)
-                ret, frame = cap.read()
-                frameflow1 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-                #Initial flow
-                
-                last_gray_frames[1] = cv2.resize(frameflow1[tuple(roi_window)],(args.dimension,args.dimension))
-                last_gray_frames_flip[1] = cv2.resize(cv2.flip(frameflow1[tuple(roi_window)],1),(args.dimension,args.dimension))
+            #Initial flow
             
-                sequence = []
-                sequence_aug = []
-                bad_hog = 0
+            last_gray_frames[1] = cv2.resize(frameflow1[tuple(roi_window)],(args.dimension,args.dimension))
+            last_gray_frames_flip[1] = cv2.resize(cv2.flip(frameflow1[tuple(roi_window)],1),(args.dimension,args.dimension))
+        
+            sequence = []
+            sequence_aug = []
+            bad_hog = 0
 
-                # GET FRAMES
-                while(cap.isOpened()):
-                    # Capture frame-by-frame
-                    ret, frame = cap.read()
+            # GET FRAMES
+            while(not debug and cap.isOpened() and not bad):
+                # Capture frame-by-frame
+                ret, frame = cap.read()
 
-                    if frame_i <= final_frame and ret == True: 
-                        
-                        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                        roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(args.dimension,args.dimension))
-
-                        # Update Last Frames
-                        last_gray_frames[0] = last_gray_frames[1]
-                        last_gray_frames[1] = roi_frame
+                if frame_i <= final_frame and ret == True: 
                     
-                        #Calcular flujo optico
-                        flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
-                                        None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
-                        
-                        #Normalize flow
-                        #TODO
+                    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(args.dimension,args.dimension))
 
-                        if DATA_AUGMENTATION and not is_test:
-                            roi_flip_frame = cv2.flip(roi_frame, 1)
-                            last_gray_frames_flip[0] = last_gray_frames_flip[1]
-                            last_gray_frames_flip[1] = roi_flip_frame
-                            flowFB_flip = cv2.calcOpticalFlowFarneback(last_gray_frames_flip[0], last_gray_frames_flip[1], 
-                                        None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+                    # Update Last Frames
+                    last_gray_frames[0] = last_gray_frames[1]
+                    last_gray_frames[1] = roi_frame
+                
+                    #Calcular flujo optico
+                    flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
+                                    None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
+                    
+                    #Normalize flow
+                    #TODO
 
-                        # Visualization
-                        if VIS:
-                            img_roi = frame[tuple(roi_window)]
-                            img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
-                            cv2.imshow("ROI", img_roi)
-                            cv2.imshow("Image", frame)
-                            cv2.waitKey(100)
+                    if DATA_AUGMENTATION and not is_test:
+                        roi_flip_frame = cv2.flip(roi_frame, 1)
+                        last_gray_frames_flip[0] = last_gray_frames_flip[1]
+                        last_gray_frames_flip[1] = roi_flip_frame
+                        flowFB_flip = cv2.calcOpticalFlowFarneback(last_gray_frames_flip[0], last_gray_frames_flip[1], 
+                                    None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
-                        #Acomular y hacer histograma
-                        if not DO_JUST_FLOW:
-                            if flow_count == 0:
-                                flow = CTTE * flowFB
-                                if DATA_AUGMENTATION and not is_test:
-                                    flow_flip = CTTE * flowFB_flip
+                    # Visualization
+                    if VIS:
+                        img_roi = frame[tuple(roi_window)]
+                        img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
+                        cv2.imshow("ROI", img_roi)
+                        cv2.imshow("Image", frame)
+                        cv2.waitKey(100)
 
-                            else:
-                                flow += CTTE * flowFB
-                                if DATA_AUGMENTATION and not is_test:
-                                    flow_flip += CTTE * flowFB_flip
-                            
-                            flow_count = flow_count + 1
-                                    
-                            if flow_count >= FLOW_ACC:
-                                flow_count = 0
+                    #Acomular y hacer histograma
+                    if not DO_JUST_FLOW:
+                        if flow_count == 0:
+                            flow = CTTE * flowFB
+                            if DATA_AUGMENTATION and not is_test:
+                                flow_flip = CTTE * flowFB_flip
 
-                                roi_flow = flow
-                                modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-
-                                orientations = 9
-                                pixels_per_cell = (16, 16)
-
-                                normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
-                                                                        cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
-
-                                # Visualization
-                                if VIS:
-                                    hog_image = normalized_blocks[1]
-                                    hog_image = np.uint8(hog_image)
-                                    hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
-                                    cv2.imshow('hog', hog_image)
-                                    normalized_blocks = normalized_blocks[0]
-
-                                #fx, fy = roi_flow[:,0], roi_flow[:,1] 
-                                #v = np.sqrt(fx * fx + fy * fy)
-                                all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
-                                count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
-
-                                #print("Count flow_roi: ", count_flow)
-                                if count_flow <= 0.05:
-                                    bad_hog = bad_hog + 1
-                                    if bad_hog > 3:
-                                        # print("No flow, skipping")
-                                        no_flow_counter += 1
-                                        bad = True
-                                        break
-
-                                #Add hog features to sequence
-                                #print("Len Hog: ",len(normalized_blocks))
-                                #print("hog shape: ", normalized_blocks.shape)
-                                sequence.append(normalized_blocks)  
-
-                                if DATA_AUGMENTATION and not is_test:
-                                    roi_flow = flow_flip
-                                    modulo, argumento, argumento2 = mi_gradiente(roi_flow)
-                                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
-                                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=False)
-                                    
-                                    sequence_aug.append(normalized_blocks)  
-                        
-                        # Put the flow into the sequence
                         else:
-                            
-                            count_flow = np.sum([flowFB > 0.5]) / (flowFB.shape[0] * flowFB.shape[1])
-                            #print(count_flow)
+                            flow += CTTE * flowFB
+                            if DATA_AUGMENTATION and not is_test:
+                                flow_flip += CTTE * flowFB_flip
+                        
+                        flow_count = flow_count + 1
+                                
+                        if flow_count >= FLOW_ACC:
+                            flow_count = 0
+
+                            roi_flow = flow
+                            modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+
+                            orientations = 9
+                            pixels_per_cell = (16, 16)
+
+                            normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
+                                                                    cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+
+                            # Visualization
+                            if VIS:
+                                hog_image = normalized_blocks[1]
+                                hog_image = np.uint8(hog_image)
+                                hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
+                                cv2.imshow('hog', hog_image)
+                                normalized_blocks = normalized_blocks[0]
+
+                            #fx, fy = roi_flow[:,0], roi_flow[:,1] 
+                            #v = np.sqrt(fx * fx + fy * fy)
+                            all_comoponents = orientations * pixels_per_cell[0] * pixels_per_cell[1]
+                            count_flow = np.sum([normalized_blocks > 0.5]) / all_comoponents
+
+                            #print("Count flow_roi: ", count_flow)
                             if count_flow <= 0.05:
                                 bad_hog = bad_hog + 1
-                                if bad_hog > 5:
+                                if bad_hog > 3:
                                     # print("No flow, skipping")
                                     no_flow_counter += 1
                                     bad = True
                                     break
 
-                            if VIS:
-                                _,  flow_HSV2 = draw_hsv(flowFB)
-                                cv2.imshow('flow', flow_HSV2)  
-                            
-                            sequence.append(flowFB) 
+                            #Add hog features to sequence
+                            #print("Len Hog: ",len(normalized_blocks))
+                            #print("hog shape: ", normalized_blocks.shape)
+                            sequence.append(normalized_blocks)  
 
                             if DATA_AUGMENTATION and not is_test:
-                                sequence_aug.append(flowFB_flip) 
-
-                        frame_i =  frame_i + 1
+                                roi_flow = flow_flip
+                                modulo, argumento, argumento2 = mi_gradiente(roi_flow)
+                                normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=9, pixels_per_cell=(16, 16), 
+                                                                        cells_per_block=(3, 3), block_norm='L2-Hys', visualize=False)
+                                
+                                sequence_aug.append(normalized_blocks)  
                     
-                    # Break the loop
-                    else: 
-                        init_frame = final_frame
-                        frame_i = init_frame
-                        final_frame = init_frame + args.frames
-                        break
+                    # Put the flow into the sequence
+                    else:
+                        
+                        count_flow = np.sum([flowFB > 0.5]) / (flowFB.shape[0] * flowFB.shape[1])
+                        #print(count_flow)
+                        if count_flow <= 0.05:
+                            bad_hog = bad_hog + 1
+                            if bad_hog > 5:
+                                # print("No flow, skipping")
+                                no_flow_counter += 1
+                                bad = True
+                                break
 
-                # End semi-framgnet processing
-                #print("len seq: ", len(sequence))
-                if not DO_JUST_FLOW and len(sequence) >= int(args.frames/FLOW_ACC):
-                    sequence = sequence[:int(args.frames/FLOW_ACC)]
-                    if DATA_AUGMENTATION and not is_test:
-                        sequence_aug = sequence_aug[:int(args.frames/FLOW_ACC)]
-                elif DO_JUST_FLOW and len(sequence) >= args.frames:
-                    sequence = sequence[:args.frames]
-                    if DATA_AUGMENTATION and not is_test:
-                        sequence_aug = sequence_aug[:args.frames]
-                else:
-                    frag_i += 1
-                    continue
+                        if VIS:
+                            _,  flow_HSV2 = draw_hsv(flowFB)
+                            cv2.imshow('flow', flow_HSV2)  
+                        
+                        sequence.append(flowFB) 
 
-                #print("len seq: ", len(sequence))
-                #Sequence and action
-                class_id = int(frag['class'])
-                count_classes[class_id] += 1
+                        if DATA_AUGMENTATION and not is_test:
+                            sequence_aug.append(flowFB_flip) 
 
-                if is_test:
-                    ytest.append(class_id)
-                    Xtest.append(np.array(sequence))
-                    metasamples_test.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
-                else:
+                    frame_i =  frame_i + 1
+                
+                # Break the loop
+                else: 
+                    break
+
+            # End semi-framgnet processing
+            #print("len seq: ", len(sequence))
+            if not DO_JUST_FLOW and len(sequence) >= int(args.frames/FLOW_ACC):
+                sequence = sequence[:int(args.frames/FLOW_ACC)]
+                if DATA_AUGMENTATION and not is_test:
+                    sequence_aug = sequence_aug[:int(args.frames/FLOW_ACC)]
+            elif DO_JUST_FLOW and len(sequence) >= args.frames:
+                sequence = sequence[:args.frames]
+                if DATA_AUGMENTATION and not is_test:
+                    sequence_aug = sequence_aug[:args.frames]
+            else:
+                frag_i += 1
+                continue
+
+            #print("len seq: ", len(sequence))
+            #Sequence and action
+            class_id = int(frag['match'])
+            count_classes[class_id] += 1
+
+            if is_test:
+                ytest.append(class_id)
+                Xtest.append(np.array(sequence))
+                metasamples_test.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
+            else:
+                ytrain.append(class_id)
+                Xtrain.append(np.array(sequence))
+                metasamples_train.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
+
+                if DATA_AUGMENTATION and not is_test:
                     ytrain.append(class_id)
-                    Xtrain.append(np.array(sequence))
-                    metasamples_train.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 0})
+                    Xtrain.append(np.array(sequence_aug))
+                    aug_count_classes[class_id] += 1                   
+                    metasamples_train.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 1})
 
-                    if DATA_AUGMENTATION and not is_test:
-                        ytrain.append(class_id)
-                        Xtrain.append(np.array(sequence_aug))
-                        metasamples_train.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 1})
-
-                frag_count = frag_count + 1
-
-            cv2.destroyAllWindows()
-            cap.release()
-            
-            frag_i += 1
-            
-        t.update()
+            frag_count = frag_count + 1
         
         except Exception as e:
             logging.error(traceback.format_exc())
             print("Continuing...")
-            frag_i += 1
-            continue
+        
+        cv2.destroyAllWindows()
+        cap.release()
+        t.update()
+        frag_i += 1
 
 
     # Export final dataset file
@@ -859,6 +866,7 @@ def main():
     print(ytest.shape)
 
     print("Total classes count:", count_classes)
+    print("Total augmented classes count:", aug_count_classes)
     print("No flow count: ", no_flow_counter, "(", no_flow_counter/(frag_count+no_flow_counter) ,")")
 
 if __name__ == "__main__":

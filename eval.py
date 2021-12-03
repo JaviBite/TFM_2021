@@ -148,7 +148,7 @@ def main():
     fig, axs = plt.subplots(2, 1, constrained_layout=True)
     axs[0].set_title('Loss')
     axs[0].plot(history['loss'], label='train')
-    axs[0].plot(history['val_loss'], label='test')
+    axs[0].plot(history['val_loss'], label='validation')
     axs[0].legend()
     axs[0].set_xlabel('Epoch')
     axs[0].set_ylabel('Loss')
@@ -156,7 +156,7 @@ def main():
 
     axs[1].set_xlabel('Epoch')
     axs[1].plot(history['acc'], label='train')
-    axs[1].plot(history['val_acc'], label='test')
+    axs[1].plot(history['val_acc'], label='validation')
     axs[1].legend()
     axs[1].set_title('Accuracy')
     axs[1].set_ylabel('Accuracy')
