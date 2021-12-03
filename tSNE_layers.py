@@ -11,7 +11,7 @@ from keras.models import Model
 import json, re, os
 from cv_scripts.libs.mi_hog import normalize
 
-layers = ['bidirectional_4','dense_8']
+layers = ['bidirectional','dense']
 
 feature_files = False
 pattern = re.compile("out_features_[a-z_0-9]+.txt")
