@@ -814,12 +814,13 @@ def main():
                         metasamples_train.append({'vid':vid, 'frames':[init_frame, final_frame], 'roi':roi, 'aug': 1})
 
                 frag_count = frag_count + 1
-                t.update()
 
             cv2.destroyAllWindows()
             cap.release()
             
             frag_i += 1
+            
+        t.update()
         
         except Exception as e:
             logging.error(traceback.format_exc())
