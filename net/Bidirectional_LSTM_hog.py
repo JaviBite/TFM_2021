@@ -148,6 +148,9 @@ def main():
     model = None
     models_metrics = []
     for train, val in kfold.split(X, labels):
+        if i > 0:
+            break
+        
 
         model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
                             lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i], condition[i])
