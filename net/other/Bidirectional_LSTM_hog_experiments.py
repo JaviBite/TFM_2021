@@ -21,6 +21,7 @@ from cv_scripts.libs.mi_hog import normalize
 from sklearn.model_selection import train_test_split
 
 from keras.models import Sequential
+from keras import regularizers
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import TimeDistributed
@@ -35,12 +36,12 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
 
     model = Sequential()
     model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
-    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout)))
+    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout, kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4))))
     model.add(Dropout(dropouts[1]))
     #model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation = hidden_act))
+    model.add(Dense(hidden_dense_untis, activation = hidden_act, kernel_regularizer=regularizers.l1_l2()))
     model.add(Dropout(dropouts[2]))
-    model.add(Dense(num_classes, activation = final_act))
+    model.add(Dense(num_classes, activation = final_act, kernel_regularizer=regularizers.l2()))
 
     return model
 
@@ -174,7 +175,7 @@ def main():
         t.update()
 
     # dumps results
-    out_file = open("out_model_metrics.json", "w")
+    out_file = open("out_bimodel_metrics.json", "w")
     json.dump(models_metrics, out_file, indent=1)
 
     

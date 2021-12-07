@@ -22,24 +22,30 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from keras.models import Sequential
+from keras.losses import categorical_crossentropy as cc
+from keras.regularizers import l1, l2, l1_l2
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
-from keras.layers import TimeDistributed
+from keras.layers import BatchNormalization
 from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import SGD, Adam, get
 from tqdm import tqdm
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from matplotlib import pyplot
 
-def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis):
+def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis, regu, condition):
 
     model = Sequential()
     model.add(Dropout(dropouts[0], input_shape=input_shape)) # (n_timesteps, n_features)
-    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout)))
+    model.add(Bidirectional(LSTM(lstm_units, return_sequences=False, activation=lstm_act, recurrent_activation=lstm_rec_act, recurrent_dropout=rec_dropout, \
+                            kernel_regularizer=l1(regu))))
+    if condition:
+        model.add(BatchNormalization())
     model.add(Dropout(dropouts[1]))
-    #model.add(Flatten())
-    model.add(Dense(hidden_dense_untis, activation = hidden_act))
+    model.add(Flatten())
+    model.add(Dense(hidden_dense_untis, activation = hidden_act, kernel_regularizer=l1(l1=regu)))
     model.add(Dropout(dropouts[2]))
     model.add(Dense(num_classes, activation = final_act))
 
@@ -108,72 +114,105 @@ def main():
     n_features = X.shape[2]
 
     INPUT_SHAPE = (n_timesteps, n_features)
+    
+    SPLITS = 6
+    
+    lr = [0.001] * SPLITS
+    lstm_units = [64]  * SPLITS
+    rec_drop = [0.2] * SPLITS
+    lstm_act = ['tanh'] * SPLITS
+    lstm_rec_act = ['sigmoid'] * SPLITS
+    final_act = ['softmax'] * SPLITS
+    hidden_act = ['sigmoid'] * SPLITS
+    dropouts = [[0.5,0.4,0.3]] * SPLITS
+    hidden_dense_untis = [64] * SPLITS
+    regularicer = [0.0005,0.0005,0.0005,0.001,0.0005,0] * SPLITS
+    condition = [True,True,True,False,False,False] * SPLITS
+    lr_patience = [5,3,1,1,1,1]
 
-    lr = [0.001]
-    lstm_units = [32]
-    rec_drop = [0.2]
-    lstm_act = ['tanh']
-    lstm_rec_act = ['hard_sigmoid']
-    final_act = ['softmax']
-    hidden_act = ['sigmoid']
-    dropouts = [[0.3,0.2,0.1]]
-    hidden_dense_untis = [16]
+    optimizers = ['adam'] * SPLITS
+    losses = ['categorical_crossentropy'] * SPLITS
+    epochs = [30] * SPLITS
+    
+    to_vis = ['condition','regularicer','lr_patience']
 
-    optimizers = ['adam']
-    losses = ['categorical_crossentropy']
-    epochs = [30]
-
-    BATCH_SIZE = 10
+    BATCH_SIZE = 5
     i = 0
+    
+    best_acc = 0
 
-    model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
-                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
-    opt = get(optimizers[i])
-    opt.learning_rate = lr[i]
-    model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
-    #print(model.summary())
+    # Define the K-fold Cross Validator
+    kfold = StratifiedKFold(n_splits=SPLITS, shuffle=True)
 
-    # Early Estopping
-    es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
-    reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
+    # K-fold Cross Validation model evaluation
+    fold_no = 1
+    model = None
+    models_metrics = []
+    for train, val in kfold.split(X, labels):
 
-    start = time.time()
-    history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                            callbacks=[es, reduce_lr], shuffle=True, verbose=1)
-    end = time.time()
-    hours, rem = divmod(end-start, 3600)
-    minutes, seconds = divmod(rem, 60)
-    elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
+        model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
+                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i], condition[i])
+        opt = get(optimizers[i])
+        opt.learning_rate = lr[i]
+        model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
+        #print(model.summary())
 
-    print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+        # Early Estopping
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
+        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=lr_patience[i])
 
-    model_json = {'lr': lr[i],
-                'lstm_units': lstm_units[i],
-                'rec_drop': rec_drop[i],
-                'lstm_act': lstm_act[i],
-                'lstm_rec_act': lstm_rec_act[i],
-                'final_act': final_act[i],
-                'hidden_act': hidden_act[i],
-                'dropouts': dropouts[i],
-                'hidden_dense_untis': hidden_dense_untis[i],
-                'optimizers': optimizers[i],
-                'losses': losses[i],
-                'epochs': epochs[i]
-    }
+        start = time.time()
+        print(X[train].shape)
+        history = model.fit(X[train], y[train], validation_data=(X[val], y[val]), epochs=epochs[i], batch_size=BATCH_SIZE, 
+                                callbacks=[es, reduce_lr], shuffle=True, verbose=1)
+        end = time.time()
+        hours, rem = divmod(end-start, 3600)
+        minutes, seconds = divmod(rem, 60)
+        elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
 
-    metrics = history.history
+        fold_no = fold_no + 1
 
-    lr_list = []
-    for f in metrics['lr']:
-        lr_list.append(float(f))
-    metrics['lr'] = lr_list
-    models_metrics = [{'model': model_json, 'history': metrics, 'etime': elapsed_time}]
+        print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+
+        model_json = {'lr': lr[i],
+                    'lstm_units': lstm_units[i],
+                    'rec_drop': rec_drop[i],
+                    'lstm_act': lstm_act[i],
+                    'lstm_rec_act': lstm_rec_act[i],
+                    'final_act': final_act[i],
+                    'hidden_act': hidden_act[i],
+                    'dropouts': dropouts[i],
+                    'hidden_dense_untis': hidden_dense_untis[i],
+                    'optimizers': optimizers[i],
+                    'losses': losses[i],
+                    'epochs': epochs[i],
+                    'regularicer': regularicer[i],
+                    'condition': condition[i],
+                    'lr_patience': lr_patience[i]
+        }
+
+        metrics = history.history
+
+        lr_list = []
+        for f in metrics['lr']:
+            lr_list.append(float(f))
+        metrics['lr'] = lr_list
+        models_metrics.append({'model': model_json, 'history': metrics, 'etime': elapsed_time, 'vis':to_vis})
+        
+        i += 1
+        
+        valX, valy = X[val], y[val]
+        
+        loss, acc = model.evaluate(valX, valy, verbose=0)
+        print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
+        
+        if acc > best_acc:
+            model.save('out_model_bilstm.h5')
+            best_acc = acc
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")
     json.dump(models_metrics, out_file, indent=1)
-
-    model.save('out_model.h5')
 
     # evaluate LSTM
     #X, y = get_sequences(100, n_timesteps, size_elem)
@@ -204,7 +243,19 @@ def main():
 
     disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=class_labels)
     disp.plot()
+    
+    pyplot.show()
 
+    # Loss histogram
+    losses = []
+    for i in range(len(valX)):
+        losses.append(cc(valy[i], yhat[i]))
+
+    fig, axs = pyplot.subplots(1, 1, constrained_layout=True)
+    axs.hist(losses)
+    axs.set_title('Loss histogram')
+    axs.set_xlabel('Loss value')
+    axs.set_ylabel('Frecuency')
     
     pyplot.show()
 
