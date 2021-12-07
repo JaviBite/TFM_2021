@@ -115,7 +115,7 @@ def main():
 
     INPUT_SHAPE = (n_timesteps, n_features)
     
-    SPLITS = 5
+    SPLITS = 6
     
     lr = [0.001] * SPLITS
     lstm_units = [64]  * SPLITS
@@ -126,14 +126,15 @@ def main():
     hidden_act = ['sigmoid'] * SPLITS
     dropouts = [[0.5,0.4,0.3]] * SPLITS
     hidden_dense_untis = [64] * SPLITS
-    regularicer = [0.0005] * SPLITS
-    condition = [True] * SPLITS
+    regularicer = [0.0005,0.0005,0.0005,0.001,0.0005,0] * SPLITS
+    condition = [True,True,True,False,False,False] * SPLITS
+    lr_patience = [5,3,1,1,1,1]
 
     optimizers = ['adam'] * SPLITS
     losses = ['categorical_crossentropy'] * SPLITS
     epochs = [30] * SPLITS
     
-    to_vis = ['condition','regularicer']
+    to_vis = ['condition','regularicer','lr_patience']
 
     BATCH_SIZE = 5
     i = 0
@@ -148,6 +149,9 @@ def main():
     model = None
     models_metrics = []
     for train, val in kfold.split(X, labels):
+        if i > 0:
+            break
+        
 
         model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
                             lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i], condition[i])
@@ -157,10 +161,11 @@ def main():
         #print(model.summary())
 
         # Early Estopping
-        es = EarlyStopping(monitor='val_loss', mode='min', patience=5)
-        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=1)
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
+        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=lr_patience[i])
 
         start = time.time()
+        print(X[train].shape)
         history = model.fit(X[train], y[train], validation_data=(X[val], y[val]), epochs=epochs[i], batch_size=BATCH_SIZE, 
                                 callbacks=[es, reduce_lr], shuffle=True, verbose=1)
         end = time.time()
@@ -185,7 +190,8 @@ def main():
                     'losses': losses[i],
                     'epochs': epochs[i],
                     'regularicer': regularicer[i],
-                    'condition': condition[i]
+                    'condition': condition[i],
+                    'lr_patience': lr_patience[i]
         }
 
         metrics = history.history
