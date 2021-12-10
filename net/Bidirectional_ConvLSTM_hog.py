@@ -23,6 +23,8 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import keras
 from keras.models import Sequential
+from keras.losses import categorical_crossentropy as cc
+from keras.regularizers import l1, l2, l1_l2
 from keras import layers
 from keras.layers import LSTM
 from keras.layers import Dense, Dropout, Flatten
@@ -31,43 +33,28 @@ from keras.layers import Bidirectional
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import SGD, Adam, get
 from tqdm import tqdm
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from matplotlib import pyplot
 
-def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis):
+def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, lstm_rec_act, final_act, hidden_act, dropouts, hidden_dense_untis, regu, condition):
 
     inp = layers.Input(shape=input_shape)
 
     x = layers.Dropout(dropouts[0])(inp)
-    x = layers.ConvLSTM2D(
-        filters=64,
-        kernel_size=(5, 5),
-        padding="same",
-        return_sequences=True,
-        activation=lstm_act,
-    )(x)
-
-    x = layers.BatchNormalization()(x)
-    x = layers.ConvLSTM2D(
-        filters=64,
+    x = Bidirectional(layers.ConvLSTM2D(
+        filters=lstm_units,
         kernel_size=(3, 3),
         padding="same",
         return_sequences=True,
         activation=lstm_act,
-    )(x)
+        kernel_regularizer=l1(regu)
+    ))(x)
     x = layers.BatchNormalization()(x)
-    x = layers.ConvLSTM2D(
-        filters=64,
-        kernel_size=(1, 1),
-        padding="same",
-        #return_sequences=True,
-        activation=lstm_act,
-    )(x)
 
     x = Flatten()(x)
-
     x = layers.Dropout(dropouts[1])(x)
-    x = layers.Dense(hidden_dense_untis, activation= hidden_act)(x)
+    x = layers.Dense(hidden_dense_untis, activation= hidden_act, kernel_regularizer=l1(l1=regu))(x)
     x = layers.Dropout(dropouts[2])(x)
     x = layers.Dense(num_classes, activation= final_act)(x)
 
@@ -77,6 +64,14 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
     return model
 
 def main():
+
+    #Load cuda
+    from tensorflow.python.client import device_lib
+    print(device_lib.list_local_devices())
+    
+    import tensorflow as tf
+    tf.test.is_gpu_available(cuda_only=True) 
+
     # Load data
     file1 = sys.argv[1]
     files = np.load(file1, allow_pickle=True)
@@ -102,14 +97,12 @@ def main():
     # Normalice
     X_norm = []
     for row in range(N_SAMPLES):
-        add_samples = []
-        for sample in range(N_TIMESTEPS):
-            ortientation_hist = X[row,sample,:,:,:]
-            normalized_hist = ortientation_hist / np.max(ortientation_hist)
-            add_samples.append(normalized_hist)
-        X_norm.append(np.array(add_samples))
+        ortientation_hist = X[row,:,:,:,:]
+        normalized_hist = ortientation_hist / np.max(ortientation_hist)
+        X_norm.append(np.array(normalized_hist))
 
     X_norm = np.array(X_norm)
+    del X
     X = X_norm
     
     # Ravel features into an array
@@ -131,7 +124,7 @@ def main():
     print("Y Shape: ", y.shape)
 
     val_percent = 0.2
-    trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
+    #trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
 
     # define problem
     n_sequences =  X.shape[0]
@@ -143,73 +136,103 @@ def main():
     INPUT_SHAPE = (n_timesteps, width, height, channels)
 
     # do experiments
-    NUM_EXP = 1
+    NUM_EXP = 5
 
-    lr = [0.001]
-    lstm_units = [512] 
-    rec_drop = [0.2] 
-    lstm_act = ['relu']
-    lstm_rec_act = ['hard_sigmoid'] 
-    final_act = ['softmax'] 
-    hidden_act = ['sigmoid']
-    dropouts = [[0.5,0.3,0.2]] 
-    hidden_dense_untis = [1024] 
+    lr = [0.0005] * NUM_EXP
+    lstm_units = [64]  * NUM_EXP
+    rec_drop = [0.2] * NUM_EXP
+    lstm_act = ['relu'] * NUM_EXP
+    lstm_rec_act = ['hard_sigmoid'] * NUM_EXP 
+    final_act = ['softmax'] * NUM_EXP 
+    hidden_act = ['sigmoid'] * NUM_EXP
+    dropouts = [[0.5,0.4,0.3]] * NUM_EXP 
+    hidden_dense_untis = [32] * NUM_EXP
+    regularizer = [0.0005] * NUM_EXP
+    condition = [False]  * NUM_EXP
 
-    optimizers = ['adam'] 
-    losses = ['categorical_crossentropy'] 
-    epochs = [75] 
+    optimizers = ['adam'] * NUM_EXP 
+    losses = ['categorical_crossentropy'] * NUM_EXP 
+    epochs = [50] * NUM_EXP 
+    
+    to_vis = ['lstm_units','hidden_dense_untis']
 
-    BATCH_SIZE = 10
+    BATCH_SIZE = 32
     i = 0
+    MAX_I = 3
 
     models_metrics = []
+    best_acc = 0
+    
+    # Define the K-fold Cross Validator
+    kfold = StratifiedKFold(n_splits=NUM_EXP, shuffle=True)
 
-    # Run the combinations
+    # K-fold Cross Validation model evaluation
+    fold_no = 1
+    model = None
+    models_metrics = []
+    for train, val in kfold.split(X, labels):
+        if i > MAX_I:
+            break
 
-    model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
-                            lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i])
-    opt = get(optimizers[i])
-    opt.learning_rate = lr[i]
-    model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
-    #print(model.summary())
+        # Run the combinations
 
-    # Early Estopping
-    es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
-    reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=5)
+        model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
+                                lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i],regularizer[i],condition[i])
+        opt = get(optimizers[i])
+        opt.learning_rate = lr[i]
+        model.compile(loss= losses[i] , optimizer= opt , metrics=[ 'acc' ])
+        #print(model.summary())
 
-    start = time.time()
-    history = model.fit(trainX, trainy, validation_data=(valX, valy), epochs=epochs[i], batch_size=BATCH_SIZE, 
-                            callbacks=[es, reduce_lr], shuffle=True, verbose=1)
+        # Early Estopping
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=5)
+        reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=2)
 
-    end = time.time()
-    hours, rem = divmod(end-start, 3600)
-    minutes, seconds = divmod(rem, 60)
-    elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
+        start = time.time()
+        history = model.fit(X[train], y[train], validation_data=(X[val], y[val]), epochs=epochs[i], batch_size=BATCH_SIZE, 
+                                callbacks=[es, reduce_lr], shuffle=True, verbose=1)
 
-    print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+        end = time.time()
+        hours, rem = divmod(end-start, 3600)
+        minutes, seconds = divmod(rem, 60)
+        elapsed_time = {'hours': hours, 'minutes': minutes, 'seconds': seconds}
+
+        print("Elapsed time: ", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
 
 
-    model_json = {'lr': lr[i],
-                'lstm_units': lstm_units[i],
-                'rec_drop': rec_drop[i],
-                'lstm_act': lstm_act[i],
-                'lstm_rec_act': lstm_rec_act[i],
-                'final_act': final_act[i],
-                'hidden_act': hidden_act[i],
-                'dropouts': dropouts[i],
-                'hidden_dense_untis': hidden_dense_untis[i],
-                'optimizers': optimizers[i],
-                'losses': losses[i],
-                'epochs': epochs[i]
-    }
+        model_json = {'lr': lr[i],
+                    'lstm_units': lstm_units[i],
+                    'rec_drop': rec_drop[i],
+                    'lstm_act': lstm_act[i],
+                    'lstm_rec_act': lstm_rec_act[i],
+                    'final_act': final_act[i],
+                    'hidden_act': hidden_act[i],
+                    'dropouts': dropouts[i],
+                    'hidden_dense_untis': hidden_dense_untis[i],
+                    'optimizers': optimizers[i],
+                    'losses': losses[i],
+                    'epochs': epochs[i],
+                    'regularizer' : regularizer[i],
+                    'condition': condition[i]
+        }
 
-    metrics = history.history
+        metrics = history.history
 
-    lr_list = []
-    for f in metrics['lr']:
-        lr_list.append(float(f))
-    metrics['lr'] = lr_list
-    models_metrics = [{'model': model_json, 'history': metrics, 'etime': elapsed_time}]
+        lr_list = []
+        for f in metrics['lr']:
+            lr_list.append(float(f))
+        metrics['lr'] = lr_list
+        models_metrics.append({'model': model_json, 'history': metrics, 'etime': elapsed_time, 'vis':to_vis})
+        
+        i += 1
+        
+        valX, valy = X[val], y[val]
+        
+        loss, acc = model.evaluate(valX, valy, verbose=0)
+        print( 'Loss: %f, Accuracy: %f '% (loss, acc*100))
+        
+        if acc > best_acc:
+            model.save('out_model_convlstm.h5')
+            best_acc = acc
 
     # dumps results
     out_file = open("out_model_metrics.json", "w")

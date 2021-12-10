@@ -56,10 +56,8 @@ def main():
                 label += tag + "=" + str(experiment['model'][tag]) + " "
 
         else:
-            drop = experiment['model']['rec_drop']
-            l2 = experiment['model']['regularicer']
 
-            label = "drop=" + str(drop) + "l2=" + str(l2)
+            label = str(indx)
 
         history = experiment['history']
 

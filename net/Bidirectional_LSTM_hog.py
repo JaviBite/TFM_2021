@@ -52,6 +52,16 @@ def create_model(num_classes, input_shape, lstm_units, rec_dropout, lstm_act, ls
     return model
 
 def main():
+
+
+    #Load cuda
+    from tensorflow.python.client import device_lib
+    print(device_lib.list_local_devices())
+    
+    import tensorflow as tf
+    tf.test.is_gpu_available(cuda_only=True) 
+    
+    
     # Load data
     file1 = sys.argv[1]
     files = np.load(file1, allow_pickle=True)
@@ -85,6 +95,7 @@ def main():
         X_norm.append(np.array(add_samples))
 
     X_norm = np.array(X_norm)
+    del X
     X = X_norm
     
     # Ravel features into an array
@@ -106,7 +117,7 @@ def main():
     print("Y Shape: ", y.shape)
 
     val_percent = 0.2
-    trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
+    #trainX, valX, trainy, valy = train_test_split(X, y, test_size=val_percent, stratify=y)
 
     # define problem
     n_timesteps =  X.shape[1]
@@ -115,29 +126,30 @@ def main():
 
     INPUT_SHAPE = (n_timesteps, n_features)
     
-    SPLITS = 6
+    SPLITS = 5
     
-    lr = [0.001] * SPLITS
-    lstm_units = [64]  * SPLITS
+    lr = [0.001,0.0001,0.0005,0.001,0.0001] * SPLITS
+    lstm_units = [128]  * SPLITS
     rec_drop = [0.2] * SPLITS
     lstm_act = ['tanh'] * SPLITS
     lstm_rec_act = ['sigmoid'] * SPLITS
     final_act = ['softmax'] * SPLITS
     hidden_act = ['sigmoid'] * SPLITS
-    dropouts = [[0.5,0.4,0.3]] * SPLITS
-    hidden_dense_untis = [64] * SPLITS
-    regularicer = [0.0005,0.0005,0.0005,0.001,0.0005,0] * SPLITS
-    condition = [True,True,True,False,False,False] * SPLITS
-    lr_patience = [5,3,1,1,1,1]
+    dropouts = [[0.25,0.3,0.2]] * SPLITS
+    hidden_dense_untis = [128] * SPLITS
+    regularicer = [0.001] * SPLITS
+    condition = [True, True, True, False, False] * SPLITS
+    lr_patience = [2]
 
     optimizers = ['adam'] * SPLITS
     losses = ['categorical_crossentropy'] * SPLITS
     epochs = [30] * SPLITS
     
-    to_vis = ['condition','regularicer','lr_patience']
+    to_vis = ['lr','condition']
 
-    BATCH_SIZE = 5
+    BATCH_SIZE = 32
     i = 0
+    MAX_I = 4
     
     best_acc = 0
 
@@ -149,6 +161,8 @@ def main():
     model = None
     models_metrics = []
     for train, val in kfold.split(X, labels):
+        if i > MAX_I:
+            break
 
         model = create_model(N_CLASSES, INPUT_SHAPE, lstm_units[i], rec_drop[i], lstm_act[i], 
                             lstm_rec_act[i], final_act[i], hidden_act[i], dropouts[i], hidden_dense_untis[i], regularicer[i], condition[i])
@@ -158,7 +172,7 @@ def main():
         #print(model.summary())
 
         # Early Estopping
-        es = EarlyStopping(monitor='val_loss', mode='min', patience=10)
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=5)
         reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=lr_patience[i])
 
         start = time.time()
