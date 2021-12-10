@@ -152,6 +152,7 @@ def main():
     axs[0].legend()
     axs[0].set_xlabel('Epoch')
     axs[0].set_ylabel('Loss')
+    axs[0].set_ylim([0, np.max(history['val_loss'])])
 
     axs[1].set_xlabel('Epoch')
     axs[1].plot(history['acc'], label='train')
@@ -159,6 +160,7 @@ def main():
     axs[1].legend()
     axs[1].set_title('Accuracy')
     axs[1].set_ylabel('Accuracy')
+    axs[1].set_ylim([0, 1])
 
     plt.show()
 

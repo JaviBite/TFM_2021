@@ -32,21 +32,23 @@ class FlowLoader(Sequence) :
 
     for (dirpath, dirnames, filenames) in os.walk(self.flow_dir):
         for file in filenames:
-            if file.endswith('.npz'):
+            if file.endswith('.npy'):
                 class_label = dirpath.split("\\")[-1]
                 one_hot_label = to_categorical(self.labels.index(class_label), num_classes=len(self.labels))
                 self.data += [[os.path.join(dirpath, file), one_hot_label]]
 
     if random_order:
         random.shuffle(self.data)
+        
+    print(len(self.data))
 
   def __len__(self) :
-    return (np.ceil(len(self.data) / float(self.batch_size))).astype(np.int)
+    return (np.floor(len(self.data) / self.batch_size)).astype(np.int)
 
   def printClassesCount(self):
         classes_count = [0 for _ in range(len(self.labels))]
-        for frag in self.fragments:
-            classes_count[frag['match']] += 1
+        for elem in self.data:
+            classes_count += elem[1]
 
         print("Classes count:")
         for ind in range(len(classes_count)):
@@ -59,10 +61,10 @@ class FlowLoader(Sequence) :
     batch_X = []
     batch_y = []
 
-    for idx in range(idx * self.batch_size, (idx + 1) * self.batch_size):
-        file, y = self.data[idx]
+    for i in range(idx * self.batch_size, (idx + 1) * self.batch_size):
+        file, y = self.data[i]
 
-        x = np.load(file, allow_pickle=True)['a']
+        x = np.load(file, allow_pickle=True)
         if self.flatten:
             x = x.flatten()
         batch_X.append(x)

@@ -36,6 +36,13 @@ def main():
     ax_acc_t.set_ylabel('Accuracy')
 
     cmap = cm.get_cmap('tab20')
+    
+    #Lr
+    fig_lr, ax_lr = plt.subplots()
+    fig_lr.suptitle('Learning Rate', fontsize=20)
+
+    ax_lr.set_xlabel('Epoch')
+    ax_lr.set_ylabel('Lr')
 
     for indx, experiment in enumerate(data):
 
@@ -49,10 +56,8 @@ def main():
                 label += tag + "=" + str(experiment['model'][tag]) + " "
 
         else:
-            drop = experiment['model']['rec_drop']
-            l2 = experiment['model']['regularicer']
 
-            label = "drop=" + str(drop) + "l2=" + str(l2)
+            label = str(indx)
 
         history = experiment['history']
 
@@ -60,7 +65,9 @@ def main():
         ax_loss.plot(history['val_loss'], label=label, color=color, linewidth=2.0) 
 
         ax_acc_t.plot(history['acc'], label=label, color=color, linewidth=2.0)
-        ax_acc.plot(history['val_acc'], label=label, color=color, linewidth=2.0)  
+        ax_acc.plot(history['val_acc'], label=label, color=color, linewidth=2.0) 
+
+        ax_lr.plot(history['lr'], color=color, linewidth=2.0)         
 
     ax_acc.legend()
     ax_loss.legend()

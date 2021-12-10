@@ -44,9 +44,15 @@ def main():
         os.makedirs(out_dir)
 
     full_generator = FlowGenerator(json_filename, labels, BATCH_SIZE, dimension=100, padding=20, flatten=False,
-        frames_sample=25, augmentation=False, balance=True, random_order=False, disbalance_factor=30, max_segments=999)
+        frames_sample=25, augmentation=False, balance=True, random_order=False, disbalance_factor=30, max_segments=10)
+        
+    full_generator.printClassesCount()
 
     trainGenerator, testGenerator, valGenerator = full_generator.get_splits()
+    
+    trainGenerator.printClassesCount()
+    testGenerator.printClassesCount()
+    valGenerator.printClassesCount()
 
     #prgress bar
     pbar = tqdm(total=len(full_generator))
@@ -67,12 +73,12 @@ def main():
 
         metadata = []
         for i in range(len(generators[idx])):
-            sample_x, sample_y, meta = full_generator[i]
+            sample_x, sample_y, meta = generators[idx][i]
 
             label = labels_alt[np.argmax(sample_y)]
-            file  = this_out_dir + "/" + label + "/" f'{i:010d}' + ".npz"
+            file  = this_out_dir + "/" + label + "/" f'{i:010d}'
 
-            np.savez(file, a=sample_x)
+            np.save(file, sample_x)
             metadata.append(meta[0])
 
             pbar.update(1)
