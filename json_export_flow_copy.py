@@ -459,39 +459,6 @@ def main():
                         'match': elem['match']
                     })
 
-    balanced_fragments = []
-    if args.balance:
-        print("Classifing fragments in ", len(words), "classes...")
-        # Stack of fragments
-        class_stacks = [[] for _ in range(len(words))]
-
-        for frag in fragments:
-            class_id = frag['match']
-            class_stacks[class_id].append(frag)
-
-        print("Stacks:")
-        for ind in range(len(class_stacks)):
-            print(words[ind], " -> ", len(class_stacks[ind]))
-
-        # Get the minimum number of fragments
-        min_fragments = min([len(x) for x in class_stacks])
-        min_fragments += 30
-
-        if max_out_frags is not None:
-            min_fragments = min(min_fragments, int(max_out_frags/len(words)))
-
-        # Add balanced fragments
-        for ind in range(len(class_stacks)):
-            stack = class_stacks[ind]
-            if random_order:
-                random.shuffle(stack)
-            balanced_fragments.extend(stack[:min(min_fragments,len(stack))])
-    else:
-        if max_out_frags is not None:
-            fragments = fragments[:max_out_frags]
-
-    fragments = balanced_fragments if args.balance else fragments
-
     stratify_y = []
     for elem in fragments:
         stratify_y.append(elem['match'])
@@ -519,6 +486,41 @@ def main():
     train_fragments = collections_exp[0]
     test_fragments = collections_exp[1]
 
+    if args.balance:
+
+        collections = [train_fragments, test_fragments]
+        for i in range(len(collections)):
+
+            balanced_fragments = []
+            print("Classifing fragments in ", len(words), "classes...")
+            # Stack of fragments
+            class_stacks = [[] for _ in range(len(words))]
+
+            for frag in collections[i]:
+                class_id = frag['match']
+                class_stacks[class_id].append(frag)
+
+            print("Stacks:")
+            for ind in range(len(class_stacks)):
+                print(words[ind], " -> ", len(class_stacks[ind]))
+
+            # Get the minimum number of fragments
+            min_fragments = min([len(x) for x in class_stacks])
+            min_fragments += 30
+
+            if max_out_frags is not None:
+                min_fragments = min(min_fragments, int(max_out_frags/len(words)))
+
+            # Add balanced fragments
+            for ind in range(len(class_stacks)):
+                stack = class_stacks[ind]
+                balanced_fragments.extend(stack[:min(min_fragments,len(stack))])
+
+            collections_exp[i] = balanced_fragments
+
+    train_fragments = collections_exp[0]
+    test_fragments = collections_exp[1]
+
     total_fragments = len(train_fragments) + len(test_fragments)  
 
     train_frag_count = [0 for _ in range(len(words))]
@@ -533,7 +535,6 @@ def main():
     
     print("Total train fragments per class:", train_frag_count)
     print("Total test fragments per class:", test_frag_count)
-
 
     count_classes = np.zeros(len(words))
     aug_count_classes = np.zeros(len(words)) 
