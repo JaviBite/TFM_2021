@@ -132,17 +132,17 @@ def main():
     lstm_rec_act = ['hard_sigmoid'] * SPLITS
     final_act = ['sigmoid'] * SPLITS
     hidden_act = ['sigmoid'] * SPLITS
-    dropouts = [[0,0.3,0]] * SPLITS
+    dropouts = [[0.5,0.3,0.2]] * SPLITS
     hidden_dense_untis = [64] * SPLITS
-    regularicer = [0] * SPLITS
+    regularicer = [0,0.001,0.0001,0.0005] * SPLITS
     condition = [True] * SPLITS
-    lr_patience = [2]
+    lr_patience = [2] * SPLITS
 
     optimizers = ['adam'] * SPLITS
     losses = ['binary_crossentropy'] * SPLITS
     epochs = [30] * SPLITS
     
-    to_vis = ['lr','condition']
+    to_vis = ['regularicer','condition']
 
     BATCH_SIZE = 32
     i = 0
@@ -169,7 +169,7 @@ def main():
         #print(model.summary())
 
         # Early Estopping
-        es = EarlyStopping(monitor='val_loss', mode='min', patience=5)
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=5, restore_best_weights=True)
         reduce_lr = ReduceLROnPlateau(monitor="val_loss", patience=lr_patience[i])
 
         start = time.time()
@@ -252,20 +252,23 @@ def main():
 
 
     # Confusion matrix
-    matrix = multilabel_confusion_matrix(valy, predict_x > 0.5)
+    matrix = multilabel_confusion_matrix(valy, predict_x > 0.75)
 
-    f, axes = pyplot.subplots(1, N_CLASSES, figsize=(25, 15))
+    f, axes = pyplot.subplots(1, N_CLASSES)
     axes = axes.ravel()
     for i in range(matrix.shape[0]):
-        disp = ConfusionMatrixDisplay(matrix[i,:])
+
+        #Normalize the confusion matrix
+        sum_of_rows = matrix[i,:].sum(axis=1)
+        norm_mat = matrix[i,:] / sum_of_rows[:, np.newaxis]
+        
+        disp = ConfusionMatrixDisplay(norm_mat)
         disp.plot(ax=axes[i], values_format='.4g')
         disp.ax_.set_title(class_labels[i])
         disp.im_.colorbar.remove()
 
     pyplot.subplots_adjust(wspace=0.10, hspace=0.1)
     f.colorbar(disp.im_, ax=axes)
-    pyplot.show()
-    
     pyplot.show()
 
     # Loss histogram

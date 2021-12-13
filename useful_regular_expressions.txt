@@ -4,7 +4,12 @@ poner (?!olla|sarten|cazo)
 
 remover,poner (?!olla|sarten|cazo),voltear,^(?!cortar|remover|poner|interaccion|poner|voltear)
 
-python json_export_flow.py BSH_firsthalf_0.2_pots_c2_nogit.json out_40-4_d250_p20_aug_b -p 20 -dim 250 -f 40 -acc 5 -b -d
+python json_export_flow_copy.py BSH_firsthalf_0.2_pots_c2_nogit.json out_testb -p 20 -dim 250 -f 40 -acc 5 -b -d -i "remover,poner (?!olla|sarten|cazo),voltear,^(?!cortar|remover|poner|interaccion|poner|voltear)"
 
 
 eval.py out_datasets/40-4_p20_d250_c_test.npz ../models/bilstm_fulldataset_pots_changes/out_model_bilstm.h5 -hog ../models/bilstm_fulldataset_pots_changes/out_model_metrics.json BSH_firsthalf_0.2_pots_changes_nogit.json
+
+eval.py out_datasets/40-4_p20_d250_c_test.npz net/out_model_convlstm.h5 -max net/out_model_metrics.json BSH_firsthalf_0.2_pots_changes_nogit.json
+
+
+eval_ml.py out_datasets/40-4_p20_d250_ml_test.npz net/out_model_bilstm.h5 -hog net/out_model_metrics.json BSH_firsthalf_0.2_pots_nogit.json
