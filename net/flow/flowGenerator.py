@@ -285,6 +285,7 @@ class FlowGenerator(Sequence) :
             sequence_aug = sequence_aug[:self.frames_sample]
             
         # TODO normalize flow along the sequence
+        sequence = sequence / np.max(sequence)
 
         # Append the sequence to the batch
         batch_X.append(sequence)

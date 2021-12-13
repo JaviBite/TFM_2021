@@ -51,8 +51,9 @@ def create_ConvModel(num_classes, input_shape, lstm_units, rec_dropout, lstm_act
         return_sequences=True,
         activation=lstm_act,
     )(x)
-
     x = layers.BatchNormalization()(x)
+    
+    x = layers.MaxPooling3D(pool_size=(1, 5, 5), padding='same', data_format='channels_first')(x)
     x = layers.ConvLSTM2D(
         filters=64,
         kernel_size=(3, 3),
@@ -61,6 +62,8 @@ def create_ConvModel(num_classes, input_shape, lstm_units, rec_dropout, lstm_act
         activation=lstm_act,
     )(x)
     x = layers.BatchNormalization()(x)
+    
+    x = layers.MaxPooling3D(pool_size=(1, 3, 3), padding='same', data_format='channels_first')(x)
     x = layers.ConvLSTM2D(
         filters=64,
         kernel_size=(1, 1),
@@ -96,7 +99,14 @@ def main_test():
 
 def main():
 
-    BATCH_SIZE = 4
+    #Load cuda
+    from tensorflow.python.client import device_lib
+    print(device_lib.list_local_devices())
+    
+    import tensorflow as tf
+    tf.test.is_gpu_available(cuda_only=True) 
+
+    BATCH_SIZE = 6
     N_CLASSES = 4
     flow_folder = "../../out_datasets/flow"
     labels = ["stir","add","flip","others"]
@@ -108,8 +118,12 @@ def main():
     train_generator = FlowLoader(train_folder, labels, BATCH_SIZE)
     test_generator = FlowLoader(test_folder, labels, BATCH_SIZE)
     val_generator = FlowLoader(val_folder, labels, BATCH_SIZE)
+    
+    train_generator.printClassesCount()
 
     sampleX, _ = train_generator[0]
+    print(sampleX.shape)
+    sampleX, _ = train_generator[len(train_generator)-1]
     print(sampleX.shape)
     # define problem
     n_timesteps =  sampleX.shape[1]
