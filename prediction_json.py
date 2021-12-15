@@ -102,6 +102,8 @@ def main():
     # Iterate thorugh samples
     t=tqdm(len(frag_indx))
     good_count = 0
+    total_pred = [0] * N_CLASSES
+    total_prob = [0] * N_CLASSES
     for i in frag_indx:
 
         value = all_data[i]
@@ -166,11 +168,11 @@ def main():
         flow_count = 0
         frame_i = init_frame+1
         predictions = []
-        while(not DEBUG and cap.isOpened() and frame_i <= end_frame_o):
+        while(not DEBUG and cap.isOpened() and frame_i <= (end_frame_o + 40)):
             # Capture frame-by-frame
             ret, frame = cap.read()
 
-            if ret: 
+            if ret and frame_i <= end_frame_o: 
                 
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(DIM,DIM))
@@ -228,27 +230,35 @@ def main():
                         model_prediction = np.squeeze(model.predict(x))
                         predictions.append(model_prediction)
                         sequence.clear()
-            
-                frame_i = frame_i + 1
 
+            if ret:
+
+                # Save video frame if out set
+                if vid_out is not None:
+
+                    # Add text frame number
+                    (w, h), _ = cv2.getTextSize(str(frame_i), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                    cv2.rectangle(frame, (0, 0), (w + 4, int(h+5)), (255,255,255), -1)
+                    cv2.putText(frame, str(frame_i), (3, h), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+
+                    # Add text of the last prediction
+                    if len(predictions) > 0:
+                        pred_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in predictions[-1]]))
+                        text = "Pred ("+ str(len(predictions)) +"): " + pred_str
+                        cv2.putText(frame, text, (10, int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+                    vid_out.write(frame)
+
+                    if VIS:
+                        cv2.imshow("Image", frame)
+            
             else:
+                
                 # Break the loop
                 print("Error not more frames to read!") 
                 break
 
-            # Save video frame if out set
-            if vid_out is not None:
-
-                # Add text of the last prediction
-                if len(predictions) > 0:
-                    pred_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in predictions[-1]]))
-                    text = "Prediction: " + pred_str
-                    cv2.putText(frame, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-
-                vid_out.write(frame)
-
-                if VIS:
-                    cv2.imshow("Image", frame)
+            frame_i = frame_i + 1
         
         cv2.destroyAllWindows()
         cap.release()
@@ -270,6 +280,9 @@ def main():
                 print("Correct!!")
             else:
                 print("Bad :(")
+
+        total_prob += avg
+        total_pred += yhat
         
         t.update()
 
@@ -279,6 +292,8 @@ def main():
 
     # Priny statistics
     print("Accuracy: ", good_count/len(frag_indx))
+    print("Total Prob: ", total_prob/len(frag_indx))
+    print("Total Pred: ", total_pred/len(frag_indx))
 
 if __name__ == '__main__':
     main()
