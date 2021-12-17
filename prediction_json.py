@@ -20,6 +20,24 @@ from cv_scripts.flow_hog import mi_gradiente, draw_hsv
 from cv_scripts.libs.mi_hog import normalize
 from cv_scripts.libs import mi_hog
 
+class Window:
+
+    def __init__(self, win_size):
+        self.seq = []
+        self.win_size = win_size
+
+    def add(self, x):
+        self.seq.append(x)
+        if len(self.seq) > self.win_size:
+            self.seq.pop(0)
+
+    def get(self):
+        return self.seq
+
+    def __len__(self):
+        return len(self.seq)
+
+
 
 def getVidPath(jsondata, localpath, vid):
     namepath = jsondata['file'][str(vid)]['fname']
@@ -36,6 +54,8 @@ def main():
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
     parser.add_argument('-c', "--count", type=int, default=None, help="number of videos to process")
     parser.add_argument('-o', '--out', type=str, default=None, help="Path to the output videos folder (default None)")
+    parser.add_argument('-off', '--range_offset', type=int, default=1, help="Number of frames to add to the end and beginning of the video")
+    parser.add_argument('-w', '--window', type=float, default=0.0, help="Percentage of overlapping between windows")
     parser.add_argument('-vis',"--visualize", action="store_true", help="Visualize the HOG and ROI")
     parser.add_argument('-d',"--debug", action="store_true", help="Debug mode")
 
@@ -59,8 +79,10 @@ def main():
     LEN_SEQ = 10
     FRAMES_PER_SEQ = FLOW_ACC * LEN_SEQ
 
-    START_FRAMES = FRAMES_PER_SEQ * 2
-    END_FRAMES = FRAMES_PER_SEQ * 2
+    START_FRAMES = FRAMES_PER_SEQ * args.range_offset
+    END_FRAMES = FRAMES_PER_SEQ * args.range_offset
+
+    PREDICT_STEPS = int(LEN_SEQ * (1-args.window))
 
     # Create out folder if not exists
     if OUT_FOLDER is not None:
@@ -163,6 +185,8 @@ def main():
         last_gray_frames[1] = cv2.resize(img_roi,(DIM,DIM))
     
         sequence = []
+        window = Window(LEN_SEQ)
+        add_count = 0
 
         # GET FRAMES
         flow_count = 0
@@ -220,16 +244,20 @@ def main():
                         cv2.imshow('hog', hog_image)
                         normalized_blocks = normalized_blocks[0]
 
-                    sequence.append(normalize(normalized_blocks))
+                    nblocks = normalize(normalized_blocks)
+                    #sequence.append(nblocks)
+                    window.add(nblocks)
+                    add_count += 1
 
-                    if len(sequence) >= LEN_SEQ:
+                    if len(window) >= LEN_SEQ and add_count >= PREDICT_STEPS:
                         
                         #Predict the sequence
+                        sequence = window.get()
                         n_features = sequence[0].shape[0]
                         x = np.array(sequence).reshape(1, LEN_SEQ, n_features)
                         model_prediction = np.squeeze(model.predict(x))
                         predictions.append(model_prediction)
-                        sequence.clear()
+                        add_count = 0
 
             if ret:
 
