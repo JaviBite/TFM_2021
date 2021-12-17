@@ -1,4 +1,4 @@
-#python prediction_json.py BSH_firsthalf_0.2_pots_forml_nogit.json out_datasets/40-4_p20_d250_ml_metadata.json out_datasets/40-4_p20_d250_ml_test.npz ../models/bilstm_ml/out_model_bilstm.h5 
+#python prediction_json.py BSH_firsthalf_0.2_pots_forml_nogit.json out_datasets/40-4_p20_d250_ml_metadata.json out_datasets/40-4_p20_d250_ml_test.npz ../models/bilstm_ml/out_model_bilstm.h5 -c 1 -o out_pred_videos
 
 import json, argparse, os, sys, re, random
 
@@ -34,6 +34,8 @@ def main():
     parser.add_argument("data_file", type=str, help="Path to the dataset samples .npz")
     parser.add_argument("model_file", type=str, help="Path to the keras model .h5")
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
+    parser.add_argument('-c', "--count", type=int, default=None, help="number of videos to process")
+    parser.add_argument('-o', '--out', type=str, default=None, help="Path to the output videos folder (default None)")
     parser.add_argument('-vis',"--visualize", action="store_true", help="Visualize the HOG and ROI")
     parser.add_argument('-d',"--debug", action="store_true", help="Debug mode")
 
@@ -48,6 +50,9 @@ def main():
     META_FILE = args.meta_file
     JSON_FILE = args.json_file
 
+    OUT_FOLDER = args.out
+    COUNT = args.count
+
     DIM = 250
     DEBUG = args.debug
     FLOW_ACC = 4
@@ -56,6 +61,11 @@ def main():
 
     START_FRAMES = FRAMES_PER_SEQ * 2
     END_FRAMES = FRAMES_PER_SEQ * 2
+
+    # Create out folder if not exists
+    if OUT_FOLDER is not None:
+        if not os.path.exists(OUT_FOLDER):
+            os.makedirs(OUT_FOLDER)
 
     # Opening M file
     f1 = open(META_FILE, encoding='utf-8')
@@ -83,14 +93,25 @@ def main():
     # Get the model
     model = load_model(MODEL_FILE)
 
-    # Iterate thorugh samples
-    for idx, value in enumerate(metadata['samples_test']):
+    # Get the data
+    all_data = metadata['samples_test']
+    frag_indx = range(len(all_data))
+    if COUNT is not None:
+        frag_indx = random.sample(range(len(all_data)), COUNT)
 
+    # Iterate thorugh samples
+    t=tqdm(len(frag_indx))
+    good_count = 0
+    total_pred = [0] * N_CLASSES
+    total_prob = [0] * N_CLASSES
+    for i in frag_indx:
+
+        value = all_data[i]
         vid = int(value['vid'])
         init_frame = int(value['frames'][0])
         end_frame = int(value['frames'][1])
         roi = value['roi']
-        label = labels[idx]
+        label = labels[i]
 
         video_path = getVidPath(data, localpath, vid)
 
@@ -106,25 +127,15 @@ def main():
         width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
         height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`                                                                                                                                                                                 
 
-
         init_frame_o = init_frame - START_FRAMES
         end_frame_o = end_frame + END_FRAMES
 
-        print("Video interval: ", init_frame_o, "-", end_frame_o)
-
-        # Fragments which have the action
-        duration_frames = end_frame_o - init_frame_o
-        n_fragments = int(duration_frames / FRAMES_PER_SEQ)
-        time_action = [0] * n_fragments
-
-        print("Duration: ", duration_frames)
-
-        for i in range(n_fragments):
-            current_frame = i * FRAMES_PER_SEQ + init_frame_o
-            if current_frame >= init_frame and current_frame <= end_frame:
-                time_action[i] = 1
-
-        print("Action timestamps: ", time_action)
+        # If out folder, create writter
+        vid_out = None
+        if OUT_FOLDER is not None:
+            out_path = os.path.join(OUT_FOLDER, str(vid)+"_"+str(init_frame_o)+".mp4")
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            vid_out = cv2.VideoWriter(out_path, fourcc, fps, (int(width), int(height)))
 
 
         # Set the initial frame
@@ -157,11 +168,11 @@ def main():
         flow_count = 0
         frame_i = init_frame+1
         predictions = []
-        while(not DEBUG and cap.isOpened() and frame_i <= end_frame_o):
+        while(not DEBUG and cap.isOpened() and frame_i <= (end_frame_o + 40)):
             # Capture frame-by-frame
             ret, frame = cap.read()
 
-            if ret: 
+            if ret and frame_i <= end_frame_o: 
                 
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 roi_frame = cv2.resize(gray_frame[tuple(roi_window)],(DIM,DIM))
@@ -179,7 +190,6 @@ def main():
                     img_roi = frame[tuple(roi_window)]
                     img_roi = cv2.resize(img_roi,(DIM,DIM))
                     cv2.imshow("ROI", img_roi)
-                    cv2.imshow("Image", frame)
                     cv2.waitKey(100)
 
 
@@ -220,22 +230,70 @@ def main():
                         model_prediction = np.squeeze(model.predict(x))
                         predictions.append(model_prediction)
                         sequence.clear()
-            
-                frame_i = frame_i + 1
 
+            if ret:
+
+                # Save video frame if out set
+                if vid_out is not None:
+
+                    # Add text frame number
+                    (w, h), _ = cv2.getTextSize(str(frame_i), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                    cv2.rectangle(frame, (0, 0), (w + 4, int(h+5)), (255,255,255), -1)
+                    cv2.putText(frame, str(frame_i), (3, h), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+
+                    # Add text of the last prediction
+                    if len(predictions) > 0:
+                        pred_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in predictions[-1]]))
+                        text = "Pred ("+ str(len(predictions)) +"): " + pred_str
+                        cv2.putText(frame, text, (10, int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+                    vid_out.write(frame)
+
+                    if VIS:
+                        cv2.imshow("Image", frame)
+            
             else:
+                
                 # Break the loop
                 print("Error not more frames to read!") 
                 break
+
+            frame_i = frame_i + 1
         
         cv2.destroyAllWindows()
         cap.release()
 
+
+        avg = sum(np.array(predictions)/len(predictions))
+        yhat = (avg > 0.4).astype(int)
+        good = (yhat == label).all()
+
+        if good:
+            good_count = good_count + 1
+
         if VIS:
-            print("Action timestamps: ", time_action)
-            print("True: ", label)
+            print("\nTrue: ", label)
             print("Predicitons: ", np.array(predictions), "count = ", len(predictions))
-            print("Avg Predicitons: ", sum(np.array(predictions)/len(predictions)))
+            print("Avg Predicitons: ", avg)
+            print("Prediction: ", yhat)
+            if good:
+                print("Correct!!")
+            else:
+                print("Bad :(")
+
+        total_prob += avg
+        total_pred += yhat
+        
+        t.update()
+
+
+    
+    t.close()
+
+    # Priny statistics
+    print("Accuracy: ", good_count/len(frag_indx))
+    print("Total Prob: ", total_prob/len(frag_indx))
+    print("Total Pred: ", total_pred/len(frag_indx))
 
 if __name__ == '__main__':
     main()
