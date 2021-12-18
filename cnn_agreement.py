@@ -20,19 +20,19 @@ img_dim = 15
 hog_dirs = 9
 input_shape = (img_dim,img_dim,hog_dirs) # Number of inputs for the neural network
 
-path = 'D:\\GI Lab\\Pruebas_acc_v2\\'
-file = 'out_flow_f8_mf1000_aug'
+path = 'D:\\GI Lab\\'
+file = 'out_flow_f8_mf5000'
 
-directory = 'D:\\GI Lab\\Pruebas_cnn\\'
+directory = 'D:\\GI Lab\\Pruebas_cnn_2\\'
 json_path = directory+'results_'+file[9:]+'.json'
-model_path = directory+'models_def\\model_f8_w ('
-model_endname = ').h5'
+model_path = directory+'models\\model_'
+model_endname = '_f8_mf5000_retrained.h5'
 
 # ---------------------------------
 # Data reading
 # ---------------------------------
 
-Xtrain, Xtest, Ytrain, Ytest, num_classes, classes = util.load_3d_flat_w_data(path,file,img_dim,hog_dirs)
+Xtrain, Xtest, Ytrain, Ytest, num_classes, classes = util.load_3d_data(path,file,img_dim,hog_dirs)
 
 Ytrain = keras.utils.to_categorical(Ytrain, num_classes)
 Ytest = keras.utils.to_categorical(Ytest, num_classes)
@@ -47,7 +47,8 @@ json_f = open(json_path)
 json_data = json.load(json_f)
 json_f.close()
 
-num_models = 30
+num_models = 13
+min_models = 10
 Votes_md = [np.zeros_like(Ytest_md)]
 
 # ---------------------------------
@@ -59,67 +60,67 @@ Votes_md = [np.zeros_like(Ytest_md)]
 # one of them with less accuracy is discarded.
 # ---------------------------------
 
-print('Beginning best-friend-discarding')
+# print('Beginning best-friend-discarding')
 
-for i in range(num_models):
+# for i in range(num_models):
     
-    model_name = model_path+str(i+1)+model_endname
+#     model_name = model_path+str(i+1)+model_endname
     
-    model = keras.models.load_model(model_name)
+#     model = keras.models.load_model(model_name)
     
-    Ypred = model.predict(Xtest_md)
+#     Ypred = model.predict(Xtest_md)
     
-    # Vote system: Everyone sums their predicted chances for each class
-    model_vote = Ypred
+#     # Vote system: Everyone sums their predicted chances for each class
+#     model_vote = Ypred
     
-    Votes_md = np.append(Votes_md,[model_vote],axis=0)
-# end for
+#     Votes_md = np.append(Votes_md,[model_vote],axis=0)
+# # end for
 
 Votes_md = Votes_md[1:]
 Valid = [True]*num_models
 discarded_models = 0
 
-for i in range(num_models):
+# for i in range(num_models):
     
-    if discarded_models >= num_models//2 : break
+#     if discarded_models >= num_models-min_models : break
     
-    if not Valid[i]: continue
+#     if not Valid[i]: continue
 
-    min_norm = np.inf
-    best_friend = i
+#     min_norm = np.inf
+#     best_friend = i
     
-    i_vote = Votes_md[i]
+#     i_vote = Votes_md[i]
     
-    for j in range(i+1,num_models):
+#     for j in range(i+1,num_models):
         
-        if not Valid[j]: continue
+#         if not Valid[j]: continue
     
-        j_vote = Votes_md[j]
+#         j_vote = Votes_md[j]
         
-        norm = np.linalg.norm(i_vote-j_vote)
+#         norm = np.linalg.norm(i_vote-j_vote)
         
-        if norm < min_norm:
-            best_friend = j
-            min_norm = norm
-        # end if
-    # end for
+#         if norm < min_norm:
+#             best_friend = j
+#             min_norm = norm
+#         # end if
+#     # end for
     
-    if best_friend != i :
+#     if best_friend != i :
         
-        i_acc = util.getAccuracy(Ytest_md,Votes_md[i])
-        j_acc = util.getAccuracy(Ytest_md,Votes_md[best_friend])
+#         i_acc = util.getAccuracy(Ytest_md,Votes_md[i])
+#         j_acc = util.getAccuracy(Ytest_md,Votes_md[best_friend])
         
-        if i_acc < j_acc : 
-            Valid[i] = False 
-        else : 
-            Valid[best_friend] = False 
+#         if i_acc < j_acc : 
+#             Valid[i] = False 
+#         else : 
+#             Valid[best_friend] = False 
         
-        discarded_models += 1
+#         discarded_models += 1
     
-    # end if
-# end for
+#     # end if
+# # end for
 
-print('Finished')
+# print('Finished')
 print('Beginning final test')
 
 Votes = np.zeros_like(Ytest_mp)

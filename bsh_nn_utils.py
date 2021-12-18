@@ -146,19 +146,24 @@ def load_3d_flat_w_data(path,file,dim,dirs):
     print('Loading training data...')
     train_data = np.load(train_path)
     
-    train_samples = train_data['a'].shape[0]
+    data = train_data['a']
+    train_samples = data.shape[0]
+    #windows = data['a'].shape[1]
+    windows = 2
     print(train_data['a'].shape)
-    windows = train_data['a'].shape[1]
-    Xtrain = np.reshape(train_data['a'],(train_samples*windows,dim,dim,dirs))
+    
+    Xtrain = np.reshape(data[:,3:],(train_samples*windows,dim,dim,dirs))
     Ytrain = train_data['b'][:]
     Ytrain = np.array([val for val in Ytrain for _ in range(windows)])
     
     print('Loading test data...')
     test_data = np.load(test_path)
     
-    test_samples = test_data['a'].shape[0]
+    data = test_data['a']
+    test_samples = data.shape[0]
     print(test_data['a'].shape)
-    Xtest = np.reshape(test_data['a'],(test_samples*windows,dim,dim,dirs))
+    
+    Xtest = np.reshape(data[:,3:],(test_samples*windows,dim,dim,dirs))
     Ytest = test_data['b'][:]
     Ytest = np.array([val for val in Ytest for _ in range(windows)])
     

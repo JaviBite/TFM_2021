@@ -21,13 +21,13 @@ hog_dirs = 9
 num_w = 3
 input_shape = (img_dim,img_dim,hog_dirs) # Number of inputs for the neural network
 
-path = 'D:\\GI Lab\\Pruebas_acc_v2\\'
-file = 'out_flow_f8_mf500_aug_w'
+path = 'D:\\GI Lab\\'
+file = 'out_flow_f24_mf1000_w_r'
 
-directory = 'D:\\GI Lab\\Pruebas_cnn\\'
+directory = 'D:\\GI Lab\\Pruebas_cnn_2\\'
 json_path = directory+'results_'+file[9:]+'.json'
-model_path = directory+'models_def\\model_f8_w ('
-model_endname = ').h5'
+model_path = directory+'models\\model_'
+model_endname = '_f8_mf5000_retrained_retrained.h5'
 
 # ---------------------------------
 # Data reading
@@ -48,11 +48,11 @@ Ytest_md = np.array([val for val in Ytest_md for _ in range(windows)])
 Xtest_mp = Xtest[(num_test_samples//2):] 
 Ytest_mp = Ytest[(num_test_samples//2):] # For model prediction
 
-json_f = open(json_path)
-json_data = json.load(json_f)
-json_f.close()
+# json_f = open(json_path)
+# json_data = json.load(json_f)
+# json_f.close()
 
-num_models = 30
+num_models = 14
 Votes_md = [np.zeros_like(Ytest_md)]
 
 # ---------------------------------
@@ -64,65 +64,65 @@ Votes_md = [np.zeros_like(Ytest_md)]
 # one of them with less accuracy is discarded.
 # ---------------------------------
 
-print('Beginning best-friend-discarding')
+# print('Beginning best-friend-discarding')
 
-for i in range(num_models):
+# for i in range(num_models):
     
-    model_name = model_path+str(i+1)+model_endname
+#     model_name = model_path+str(i+1)+model_endname
     
-    model = keras.models.load_model(model_name)
+#     model = keras.models.load_model(model_name)
     
-    Ypred = model.predict(Xtest_md)
+#     Ypred = model.predict(Xtest_md)
     
-    # Vote system: Everyone sums their predicted chances for each class
-    model_vote = Ypred
+#     # Vote system: Everyone sums their predicted chances for each class
+#     model_vote = Ypred
     
-    Votes_md = np.append(Votes_md,[model_vote],axis=0)
-#end for
+#     Votes_md = np.append(Votes_md,[model_vote],axis=0)
+# #end for
 
 Votes_md = Votes_md[1:]
 Valid = [True]*num_models
 discarded_models = 0
 
-for i in range(num_models):
+# for i in range(num_models):
 
-    if num_models-discarded_models <= num_models//2 : break
+#     if num_models-discarded_models <= num_models//2 : break
     
-    if not Valid[i]: continue
+#     if not Valid[i]: continue
 
-    min_norm = np.inf
-    best_friend = i
+#     min_norm = np.inf
+#     best_friend = i
     
-    i_vote = Votes_md[i]
+#     i_vote = Votes_md[i]
     
-    for j in range(i+1,num_models):
+#     for j in range(i+1,num_models):
         
-        if not Valid[j]: continue
+#         if not Valid[j]: continue
     
-        j_vote = Votes_md[j]
+#         j_vote = Votes_md[j]
         
-        norm = np.linalg.norm(i_vote-j_vote)
+#         norm = np.linalg.norm(i_vote-j_vote)
         
-        if norm < min_norm:
-            best_friend = j
-            min_norm = norm
-        # end if
-    # end for
+#         if norm < min_norm:
+#             best_friend = j
+#             min_norm = norm
+#         # end if
+#     # end for
     
-    if best_friend != i :
+#     if best_friend != i :
         
-        i_acc = util.getAccuracy(Ytest_md,Votes_md[i])
-        j_acc = util.getAccuracy(Ytest_md,Votes_md[best_friend])
+#         i_acc = util.getAccuracy(Ytest_md,Votes_md[i])
+#         j_acc = util.getAccuracy(Ytest_md,Votes_md[best_friend])
         
-        if i_acc < j_acc : 
-            Valid[i] = False 
-        else : 
-            Valid[best_friend] = False 
+#         if i_acc < j_acc : 
+#             Valid[i] = False 
+#         else : 
+#             Valid[best_friend] = False 
         
-        discarded_models += 1
+#         discarded_models += 1
     
-    # end if
-# end for
+#     # end if
+# # end for
 
 # ---------------------------------
 
@@ -140,7 +140,6 @@ for i in range(num_models):
     
     model = keras.models.load_model(model_name)
     MyVotes = [np.zeros_like(Ytest)]*num_w
-    MyRawVotes = [np.zeros_like(Ytest)]*num_w
         
     for j in range(num_w):
         
@@ -148,35 +147,21 @@ for i in range(num_models):
     
         model_vote = model.predict(window)
         
-        MyRawVotes[j] = model_vote
-        
         if j == 0:
             MyVotes[0] = model_vote
         else:
             MyVotes[j] = MyVotes[j-1]*j/(j+1) + model_vote/(j+1)
         
         Votes[j] = Votes[j] + MyVotes[j]
-        RawVotes[j] = RawVotes[j] + MyRawVotes[j]
+        RawVotes[j] = RawVotes[j] + model_vote
         
     # end for
     
-    print("Raw accuracy per window:")
-    
     ini_acc = util.getAccuracy(Ytest_mp, MyVotes[0])
-    
-    print("---",ini_acc)
-    
-    mid_acc = util.getAccuracy(Ytest_mp, MyRawVotes[1])
-    
-    print("---",mid_acc)
-    
-    late_acc = util.getAccuracy(Ytest_mp, MyRawVotes[2])
-    
-    print("---",late_acc)
     
     final_acc = util.getAccuracy(Ytest_mp, MyVotes[num_w-1])
     
-    print("Final weighted acuracy:", final_acc)
+    print(ini_acc,"---->", final_acc)
     
     AvProg += (final_acc-ini_acc)
         
@@ -185,14 +170,9 @@ for i in range(num_models):
 
 util.plot_confusion_matrix(Ytest_mp,Votes[num_w-1],num_classes)
 
-acc1 = util.getAccuracy(Ytest_mp,RawVotes[0])
-acc2 = util.getAccuracy(Ytest_mp,RawVotes[1])
-acc3 = util.getAccuracy(Ytest_mp,RawVotes[2])
-
 print()
 print('# of models over the threshold: '+str(num_models))
 print('# of models discarded by similarity: '+str(discarded_models))
-print('Average per-model raw accuracies:',acc1,acc2,acc3)
 print('Average per-model acc. progression:',AvProg/(num_models-discarded_models))
 print('Agreement accuracy progression: ')
 print(str(util.getAccuracy(Ytest_mp,Votes[0])),"--->",str(util.getAccuracy(Ytest_mp,Votes[num_w-1])))

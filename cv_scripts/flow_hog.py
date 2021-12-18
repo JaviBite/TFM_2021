@@ -13,11 +13,8 @@ from cv_scripts.libs import mi_hog
 
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
-import os
-import scipy.io
 
-from cv_scripts.pot_det import detect_pots, draw_pot_elipse
+#from cv_scripts.pot_det import detect_pots, draw_pot_elipse
 
 #from cv2 import __version__
 #print(__version__)

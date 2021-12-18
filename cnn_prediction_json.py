@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Dec 17 12:52:11 2021
+
+@author: Miguel
+"""
+
 #python prediction_json.py BSH_firsthalf_0.2_pots_forml_nogit.json out_datasets/40-4_p20_d250_ml_metadata.json out_datasets/40-4_p20_d250_ml_test.npz ../models/bilstm_ml/out_model_bilstm.h5 -c 1 -o out_pred_videos
 
 import json, argparse, os, random
@@ -26,46 +33,47 @@ def main():
     parser.add_argument("json_file", type=str, help="Path to the dataset .json")
     parser.add_argument("meta_file", type=str, help="Path to the dataset metadata .json")
     parser.add_argument("data_file", type=str, help="Path to the dataset samples .npz")
-    parser.add_argument("model_file", type=str, help="Path to the keras model .h5")
+    parser.add_argument("model_path", type=str, help="Common path for the keras models. Will be followed by \"model_x.npz\" for loading")
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
-    parser.add_argument('-c', "--count", type=int, default=None, help="number of videos to process")
+    parser.add_argument("-n", "--nummodels", type=int, default=1, help="Number of models")
+    parser.add_argument('-c', "--count", type=int, default=None, help="Number of videos to process")
     parser.add_argument('-o', '--out', type=str, default=None, help="Path to the output videos folder (default None)")
     parser.add_argument('-vis',"--visualize", action="store_true", help="Visualize the HOG and ROI")
-    parser.add_argument('-d',"--debug", action="store_true", help="Debug mode")
 
     args = parser.parse_args()
     
     # Parsed values
     VID_FOLDER = args.videos_folder
-    VIS = args.visualize or args.debug
+    VIS = args.visualize
     
-    MODEL_FILE = args.model_file
+    MODEL_PATH = args.model_path
     DATA_FILE = args.data_file
     META_FILE = args.meta_file
     JSON_FILE = args.json_file
 
     OUT_FOLDER = args.out
     COUNT = args.count
+    NUM_MODELS = args.nummodels
 
     DIM = 250
-    DEBUG = args.debug
-    FLOW_ACC = 4
-    LEN_SEQ = 10
-    FRAMES_PER_SEQ = FLOW_ACC * LEN_SEQ
+    FLOW_ACC = 8
 
-    START_FRAMES = FRAMES_PER_SEQ * 2
-    END_FRAMES = FRAMES_PER_SEQ * 2
+    START_FRAMES = FLOW_ACC
+    END_FRAMES = FLOW_ACC
 
-    # Create out folder if not exists
+    # Create out folder if it doesn't exist
     if OUT_FOLDER is not None:
         if not os.path.exists(OUT_FOLDER):
             os.makedirs(OUT_FOLDER)
+        # end if
+    # end if
 
-    # Opening M file
+    # Opening dataset metadata json file
     f1 = open(META_FILE, encoding='utf-8')
     metadata = json.load(f1)
     f1.close()
 
+    # Opening dataset json file
     f1 = open(JSON_FILE, encoding='utf-8')
     data = json.load(f1)
     f1.close()
@@ -74,6 +82,7 @@ def main():
         localpath = data['config']['file']['loc_prefix']['1'][8:]
     else:
         localpath = args.videos_folder
+    # end if
     
     class_names = metadata['classes']
     print("Classes: ", class_names)
@@ -84,8 +93,11 @@ def main():
     files = np.load(DATA_FILE, allow_pickle=True)
     _, labels = files['a'], files['b']
 
-    # Get the model
-    model = load_model(MODEL_FILE)
+    # Get the models
+    models = [0]*NUM_MODELS;
+    for i in range(NUM_MODELS):
+        models[i] = load_model(MODEL_PATH+"\\model_"+str(i+1)+".h5")
+    # end for
 
     # Get the data
     all_data = metadata['samples_test']
@@ -93,7 +105,7 @@ def main():
     if COUNT is not None:
         frag_indx = random.sample(range(len(all_data)), COUNT)
 
-    # Iterate thorugh samples
+    # Iterate through samples
     t=tqdm(len(frag_indx))
     good_count = 0
     total_pred = [0] * N_CLASSES
@@ -124,7 +136,7 @@ def main():
         init_frame_o = init_frame - START_FRAMES
         end_frame_o = end_frame + END_FRAMES
 
-        # If out folder, create writter
+        # If out folder, create writer
         vid_out = None
         if OUT_FOLDER is not None:
             out_path = os.path.join(OUT_FOLDER, str(vid)+"_"+str(init_frame_o)+".mp4")
@@ -142,13 +154,6 @@ def main():
 
         # Read Initial frame
         ret, frame = cap.read()
-
-        if DEBUG:
-            
-            img_roi = frame[tuple(roi_window)]
-            img_roi = cv2.resize(img_roi,(DIM,DIM))
-            cv2.imshow("ROI", img_roi)
-            cv2.waitKey(0)
             
         #Initial flow
         last_gray_frames = [None, None]
@@ -162,7 +167,7 @@ def main():
         flow_count = 0
         frame_i = init_frame+1
         predictions = []
-        while(not DEBUG and cap.isOpened() and frame_i <= (end_frame_o + 40)):
+        while(cap.isOpened() and frame_i <= end_frame_o):
             # Capture frame-by-frame
             ret, frame = cap.read()
 
@@ -179,15 +184,15 @@ def main():
                 flowFB = cv2.calcOpticalFlowFarneback(last_gray_frames[0], last_gray_frames[1], 
                                 None, 0.6, 3, 25, 7, 5, 1.2, cv2.OPTFLOW_FARNEBACK_GAUSSIAN)
 
-                # Visualization
-                if VIS:
-                    img_roi = frame[tuple(roi_window)]
-                    img_roi = cv2.resize(img_roi,(DIM,DIM))
-                    cv2.imshow("ROI", img_roi)
-                    cv2.waitKey(100)
+                # # Visualization
+                # if VIS:
+                #     img_roi = frame[tuple(roi_window)]
+                #     img_roi = cv2.resize(img_roi,(DIM,DIM))
+                #     cv2.imshow("ROI", img_roi)
+                #     cv2.waitKey(100)
 
 
-                #Acomular y hacer histograma
+                #Acumular y hacer histograma
                 if flow_count == 0:
                     flow = flowFB
 
@@ -197,33 +202,36 @@ def main():
                 flow_count = flow_count + 1
                         
                 if flow_count >= FLOW_ACC:
+                    
                     flow_count = 0
 
                     modulo, _, argumento2 = mi_gradiente(flow)
 
                     orientations = 9
                     pixels_per_cell = (16, 16)
-                    normalized_blocks = mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
-                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS)
+                    normalized_blocks = normalize(mi_hog.hog(modulo, argumento2, number_of_orientations=orientations, pixels_per_cell=pixels_per_cell, 
+                                                            cells_per_block=(3, 3), block_norm='L2-Hys', visualize=VIS))
+                    normalized_blocks = (normalized_blocks-np.mean(normalized_blocks))/np.std(normalized_blocks)
 
-                    # Visualization
-                    if VIS:
-                        hog_image = normalized_blocks[1]
-                        hog_image = np.uint8(hog_image)
-                        hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
-                        cv2.imshow('hog', hog_image)
-                        normalized_blocks = normalized_blocks[0]
-
-                    sequence.append(normalize(normalized_blocks))
-
-                    if len(sequence) >= LEN_SEQ:
+                    # # Visualization
+                    # if VIS:
+                    #     hog_image = normalized_blocks[1]
+                    #     hog_image = np.uint8(hog_image)
+                    #     hog_image = cv2.cvtColor(hog_image, cv2.COLOR_GRAY2RGB)     
+                    #     cv2.imshow('hog', hog_image)
+                    #     normalized_blocks = normalized_blocks[0]
                         
-                        #Predict the sequence
-                        n_features = sequence[0].shape[0]
-                        x = np.array(sequence).reshape(1, LEN_SEQ, n_features)
-                        model_prediction = np.squeeze(model.predict(x))
-                        predictions.append(model_prediction)
-                        sequence.clear()
+                    #Predict the sequence
+                    
+                    prediction = [0,0,0,0]
+                    
+                    for model in models:
+                        
+                        prediction += model.predict(normalized_blocks)
+                        
+                    # end for
+                    
+                    prediction = prediction/NUM_MODELS
 
             if ret:
 
@@ -257,7 +265,6 @@ def main():
         cv2.destroyAllWindows()
         cap.release()
 
-
         avg = sum(np.array(predictions)/len(predictions))
         yhat = (avg > 0.4).astype(int)
         good = (yhat == label).all()
@@ -284,7 +291,7 @@ def main():
     
     t.close()
 
-    # Priny statistics
+    # Print statistics
     print("Accuracy: ", good_count/len(frag_indx))
     print("Total Prob: ", total_prob/len(frag_indx))
     print("Total Pred: ", total_pred/len(frag_indx))

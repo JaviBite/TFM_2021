@@ -1,8 +1,6 @@
 # Script para detectar las sartenes/ollas/etc
 # Detectron2 (y tracking despues)
 
-import sys, os
-import codecs, unicodedata
 import cv2, math
 import numpy as np
 
@@ -10,18 +8,13 @@ import argparse
 import time
 import tqdm
 
-import torch
+#import torch
 
 # Detectron imports
-from detectron2 import model_zoo
+# from detectron2 import model_zoo
 
-from detectron2.engine import DefaultPredictor
-from detectron2.config import get_cfg
-from detectron2.utils.video_visualizer import VideoVisualizer
-from detectron2.utils.visualizer import ColorMode, Visualizer
-from detectron2.data.datasets import register_coco_instances
-from detectron2.data import MetadataCatalog, DatasetCatalog
-from detectron2.structures import Boxes, BoxMode, Instances, pairwise_ioa
+# from detectron2.engine import DefaultPredictor
+# from detectron2.config import get_cfg
 
 # Coco models
 

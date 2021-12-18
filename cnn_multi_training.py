@@ -21,10 +21,10 @@ img_dim = 15
 hog_dirs = 9
 input_shape = (img_dim,img_dim,hog_dirs) # Number of inputs for the neural network
 
-path = 'D:\\GI Lab\\Pruebas_acc_v2\\'
-file = 'out_flow_f24_mf500_aug_w'
+path = 'D:\\GI Lab\\'
+file = 'out_flow_f24_mf1000_w_r'
 
-out_path = 'D:\\GI Lab\\Pruebas_cnn\\'
+out_path = 'D:\\GI Lab\\Pruebas_cnn_2\\'
 out_file_path = out_path+'results_'+file[9:]+'.json'
 
 num_model = 1
@@ -33,7 +33,7 @@ model_path = out_model_path+'model_'
 model_endname = '_'+file[9:]+'.h5'
 
 # Models with less accuracy than this value will be discarded
-score_threshold = 0.45
+score_threshold = 0.5
 
 # ---------------------------------
 # Parameter combinators
