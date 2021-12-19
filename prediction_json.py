@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 from tqdm import tqdm
 
-import traceback, logging
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 from keras.utils.all_utils import to_categorical
 from keras.models import load_model
@@ -54,7 +54,7 @@ def main():
     parser.add_argument('videos_folder', nargs='?', default="none", help="Path to the videos folder (default by dataset json)")
     parser.add_argument('-c', "--count", type=int, default=None, help="number of videos to process")
     parser.add_argument('-o', '--out', type=str, default=None, help="Path to the output videos folder (default None)")
-    parser.add_argument('-off', '--range_offset', type=int, default=1, help="Number of frames to add to the end and beginning of the video")
+    parser.add_argument('-off', '--range_offset', type=float, default=1, help="Number of frames to add to the end and beginning of the video")
     parser.add_argument('-w', '--window', type=float, default=0.0, help="Percentage of overlapping between windows")
     parser.add_argument('-vis',"--visualize", action="store_true", help="Visualize the HOG and ROI")
     parser.add_argument('-d',"--debug", action="store_true", help="Debug mode")
@@ -123,6 +123,8 @@ def main():
 
     # Iterate thorugh samples
     t=tqdm(len(frag_indx))
+    list_yhat = []
+    list_y = []
     good_count = 0
     total_pred = [0] * N_CLASSES
     total_prob = [0] * N_CLASSES
@@ -296,6 +298,9 @@ def main():
         yhat = (avg > 0.4).astype(int)
         good = (yhat == label).all()
 
+        list_yhat.append(yhat)
+        list_y.append(label)
+
         if good:
             good_count = good_count + 1
 
@@ -318,10 +323,21 @@ def main():
     
     t.close()
 
+    f1_s = f1_score(list_y, list_yhat, average='weighted')
+    precision = precision_score(list_y, list_yhat, average='weighted')
+    recall = recall_score(list_y, list_yhat, average='weighted')
+
     # Priny statistics
     print("Accuracy: ", good_count/len(frag_indx))
-    print("Total Prob: ", total_prob/len(frag_indx))
+    print("Precision: ", precision)
+    print("Recall: ", recall)
+    print("F1 Score: ", f1_s)
+
+
+    print("\nTotal Prob: ", total_prob/len(frag_indx))
     print("Total Pred: ", total_pred/len(frag_indx))
+
+
 
 if __name__ == '__main__':
     main()
