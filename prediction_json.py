@@ -122,7 +122,7 @@ def main():
         frag_indx = random.sample(range(len(all_data)), COUNT)
 
     # Iterate thorugh samples
-    t=tqdm(len(frag_indx))
+    t=tqdm(total=len(frag_indx))
     list_yhat = []
     list_y = []
     good_count = 0
