@@ -1,4 +1,4 @@
-#python prediction_json.py BSH_firsthalf_0.2_pots_forml_nogit.json out_datasets/40-4_p20_d250_ml_metadata.json out_datasets/40-4_p20_d250_ml_test.npz ../models/bilstm_ml/out_model_bilstm.h5 -c 1 -o out_pred_videos
+#python prediction_json.py BSH_firsthalf_0.2_pots_forml_nogit.json out_datasets/40-4_p20_d250_ml_metadata.json out_datasets/40-4_p20_d250_ml_test.npz ../models/bilstm_ml/out_model_bilstm.h5 -c 1 -o out_pred_videos -off 0.5 -w 0.8
 
 import json, argparse, os, sys, re, random
 
@@ -157,7 +157,7 @@ def main():
         # If out folder, create writter
         vid_out = None
         if OUT_FOLDER is not None:
-            out_path = os.path.join(OUT_FOLDER, str(vid)+"_"+str(init_frame_o)+".mp4")
+            out_path = os.path.join(OUT_FOLDER, str(vid)+"_"+str(int(init_frame_o))+".mp4")
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             vid_out = cv2.VideoWriter(out_path, fourcc, fps, (int(width), int(height)))
 
@@ -192,9 +192,11 @@ def main():
 
         # GET FRAMES
         flow_count = 0
-        frame_i = init_frame+1
+        frame_i = init_frame_o+1
         predictions = []
-        while(not DEBUG and cap.isOpened() and frame_i <= (end_frame_o + 40)):
+        in_action = []
+        in_action_frames = False
+        while(not DEBUG and cap.isOpened() and frame_i <= (end_frame_o + 25)):
             # Capture frame-by-frame
             ret, frame = cap.read()
 
@@ -259,28 +261,53 @@ def main():
                         x = np.array(sequence).reshape(1, LEN_SEQ, n_features)
                         model_prediction = np.squeeze(model.predict(x))
                         predictions.append(model_prediction)
+                        in_action.append(int(abs(end_frame - frame_i)) < int((LEN_SEQ * FLOW_ACC)/2))
                         add_count = 0
+
+
+
+                in_action_frames = frame_i > init_frame and frame_i < end_frame
 
             if ret:
 
                 # Save video frame if out set
                 if vid_out is not None:
+                    
+                    # Show legend on first frames
+                    if len(predictions) <= 1:
+                        legend_text = "[STIR, ADD, FLIP, OTHERS]"
+                        (w, h), _ = cv2.getTextSize(legend_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                        cv2.putText(frame, legend_text, (int(width-w-20), int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
 
                     # Add text frame number
+                    colorbg = (255,255,255) if not in_action_frames else (0,255,0)
+                    colorfont = (0,0,0)
                     (w, h), _ = cv2.getTextSize(str(frame_i), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                    cv2.rectangle(frame, (0, 0), (w + 4, int(h+5)), (255,255,255), -1)
-                    cv2.putText(frame, str(frame_i), (3, h), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+                    cv2.rectangle(frame, (0, 0), (w + 4, int(h+5)), colorbg, -1)
+                    cv2.putText(frame, str(int(frame_i)), (3, h), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colorfont, 1)
 
                     # Add text of the last prediction
                     if len(predictions) > 0:
                         pred_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in predictions[-1]]))
-                        text = "Pred ("+ str(len(predictions)) +"): " + pred_str
-                        cv2.putText(frame, text, (10, int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                        text = "Pred: ("+ str(len(predictions)) +"): " + pred_str
+                        color = (0, 255, 0) if in_action[-1] else (255, 255, 255)
+                        cv2.putText(frame, text, (10, int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+                        avg = sum(np.array(predictions)/len(predictions))
+                        avg_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in avg]))
+                        text = "Avg: ("+ str(len(predictions)) +"): " + avg_str
+                        cv2.putText(frame, text, (10, int(height-50)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+                        yhat = (avg > 0.4).astype(int)
+                        yhat_str = '[{:s}]'.format(', '.join([str(int(x)) for x in yhat]))
+                        text = "Th: ("+ str(len(predictions)) +"): " + yhat_str
+                        cv2.putText(frame, text, (10, int(height-70)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                     vid_out.write(frame)
 
-                    if VIS:
-                        cv2.imshow("Image", frame)
+                if VIS:
+                    cv2.imshow("Image", frame)
             
             else:
                 
