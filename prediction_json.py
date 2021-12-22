@@ -117,6 +117,7 @@ def main():
 
     # Get the data
     all_data = metadata['samples_test']
+    CLASS_NAMES = metadata['classes']
     frag_indx = range(len(all_data))
     if COUNT is not None:
         frag_indx = random.sample(range(len(all_data)), COUNT)
@@ -277,7 +278,7 @@ def main():
                     if len(predictions) <= 1:
                         legend_text = "[STIR, ADD, FLIP, OTHERS]"
                         (w, h), _ = cv2.getTextSize(legend_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                        cv2.putText(frame, legend_text, (int(width-w-20), int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                        #cv2.putText(frame, legend_text, (int(width-w-20), int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
 
                     # Add text frame number
@@ -290,19 +291,25 @@ def main():
                     # Add text of the last prediction
                     if len(predictions) > 0:
                         pred_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in predictions[-1]]))
-                        text = "Pred: ("+ str(len(predictions)) +"): " + pred_str
+
+                        class_names = []
+                        for idx, value in enumerate(predictions[-1]):
+                            if value > 0.4:
+                                class_names.append(CLASS_NAMES[idx])
+
+                        text = "Pred: ("+ str(len(predictions)) +"): " + pred_str + " : " + str(class_names)
                         color = (0, 255, 0) if in_action[-1] else (255, 255, 255)
                         cv2.putText(frame, text, (10, int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                         avg = sum(np.array(predictions)/len(predictions))
                         avg_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in avg]))
                         text = "Avg: ("+ str(len(predictions)) +"): " + avg_str
-                        cv2.putText(frame, text, (10, int(height-50)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                        #cv2.putText(frame, text, (10, int(height-50)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                         yhat = (avg > 0.4).astype(int)
                         yhat_str = '[{:s}]'.format(', '.join([str(int(x)) for x in yhat]))
                         text = "Th: ("+ str(len(predictions)) +"): " + yhat_str
-                        cv2.putText(frame, text, (10, int(height-70)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                        #cv2.putText(frame, text, (10, int(height-70)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                     vid_out.write(frame)
 
