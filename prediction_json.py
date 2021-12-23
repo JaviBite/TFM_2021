@@ -1,4 +1,4 @@
-#python prediction_json.py BSH_firsthalf_0.2_pots_forml_nogit.json out_datasets/40-4_p20_d250_ml_metadata.json out_datasets/40-4_p20_d250_ml_test.npz ../models/bilstm_ml/out_model_bilstm.h5 -c 1 -o out_pred_videos -off 0.5 -w 0.8
+#python prediction_json.py BSH_firsthalf_0.2_pots_forml_nogit.json out_datasets/40-4_p20_d250_ml_metadata.json out_datasets/40-4_p20_d250_ml_test.npz ../models/bilstm_ml/out_model_bilstm.h5 -c 1 -o out_pred_videos -off 1 -w 0.7
 
 import json, argparse, os, sys, re, random
 
@@ -301,7 +301,7 @@ def main():
                         color = (0, 255, 0) if in_action[-1] else (255, 255, 255)
                         cv2.putText(frame, text, (10, int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-                        text = "[STIR, ADD, FLIP, OTHERS]"
+                        text = "          [STIR, ADD, FLIP, OTHERS]"
                         cv2.putText(frame, text, (10, int(height-50)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                         avg = sum(np.array(predictions)/len(predictions))
