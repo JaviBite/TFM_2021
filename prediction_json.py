@@ -282,7 +282,7 @@ def main():
 
 
                     # Add text frame number
-                    colorbg = (255,255,255) if not in_action_frames else (0,255,0)
+                    colorbg = (200,200,200) if not in_action_frames else (0,255,0)
                     colorfont = (0,0,0)
                     (w, h), _ = cv2.getTextSize(str(frame_i), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
                     cv2.rectangle(frame, (0, 0), (w + 4, int(h+5)), colorbg, -1)
@@ -300,6 +300,9 @@ def main():
                         text = "Pred: ("+ str(len(predictions)) +"): " + pred_str + " : " + str(class_names)
                         color = (0, 255, 0) if in_action[-1] else (255, 255, 255)
                         cv2.putText(frame, text, (10, int(height-30)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+                        text = "[STIR, ADD, FLIP, OTHERS]"
+                        cv2.putText(frame, text, (10, int(height-50)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                         avg = sum(np.array(predictions)/len(predictions))
                         avg_str = '[{:s}]'.format(', '.join(['{:.2f}'.format(x) for x in avg]))
