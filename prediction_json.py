@@ -4,6 +4,8 @@ import json, argparse, os, sys, re, random
 
 import cv2
 
+from matplotlib import pyplot as plt
+
 from sklearn.model_selection import train_test_split
 import numpy as np
 from tqdm import tqdm
@@ -353,8 +355,27 @@ def main():
 
         total_prob += avg
         total_pred += yhat
+
+        # Graph predictions
+        if OUT_FOLDER is not None:
+            img_out_path = os.path.join(OUT_FOLDER, str(vid)+"_"+str(int(init_frame_o))+".png")
+
+            fig, ax = plt.subplots()
+
+            predictions = np.matrix(predictions)
+            time_frames = np.arange(0, len(predictions), 1)
+            ax.plot(time_frames, predictions[:,0], color = 'green', label = 'Stir')
+            ax.plot(time_frames, predictions[:,1], color = 'red', label = 'Add')
+            ax.plot(time_frames, predictions[:,2], color = 'blue', label = 'Flip')
+            ax.plot(time_frames, predictions[:,3], color = 'yellow', label = 'Others')
+            ax.set_xlabel("Time stamps")
+            ax.set_ylabel("Score")
+            ax.legend(loc = 'upper left')
+            plt.savefig(img_out_path)
         
         t.update()
+
+
 
 
     
@@ -373,8 +394,6 @@ def main():
 
     print("\nTotal Prob: ", total_prob/len(frag_indx))
     print("Total Pred: ", total_pred/len(frag_indx))
-
-
 
 if __name__ == '__main__':
     main()
