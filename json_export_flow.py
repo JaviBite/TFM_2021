@@ -648,6 +648,9 @@ def main():
                 img_roi = cv2.resize(img_roi,(args.dimension,args.dimension))
                 cv2.imshow("ROI", img_roi)
 
+                print("Roi window: ",roi_window)
+                print(f"Vid {vid} Frame {frame_i}, End Frame {final_frame}")
+
                 frag_count += 1
                 cv2.waitKey(0)
             

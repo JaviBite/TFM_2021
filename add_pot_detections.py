@@ -115,10 +115,10 @@ def get_motion_fragments(data):
         vid = int(value['vid'])
 
         action = None
-        if '1' in value['av']:
+        if '1' in value['av'] and len(value['xy']) == 0:
             action = str(value['av']['1'])
-
-        hit = re.search(MOTION_ACTION_REG,action)
+            hit = re.search(MOTION_ACTION_REG,action)
+            
         if action is not None and hit is not None:
 
             if vid not in fragments:

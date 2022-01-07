@@ -39,11 +39,13 @@ def main():
     # Get the full actions
     actions = {}
     roi_count = 0
+    full_count = 0
     for tag, value in zip(data['metadata'], data['metadata'].values()):
 
         if '2' in value['av']:
             roi_count += 1
         else:
+            full_count += 1
             action = str(value['av']['1'])
 
             if action in actions.keys():
@@ -51,7 +53,6 @@ def main():
             else:
                 actions[action]  = 1
             
-    print("ROI Count: ", roi_count)
     if sort_mode == 'frec':
         actions = dict(sorted(actions.items(), reverse=reverse_order, key=lambda item: item[1]))
     elif sort_mode == 'alph':
@@ -111,6 +112,16 @@ def main():
     # Closing file
     f1.close()
     out.close()
+
+    total_noums = 0
+    total_action = 0
+
+    print("ROI Count: ", roi_count)
+    print("Full Count: ", full_count)
+    print("Total unique count:" , len(actions))
+    print("Total unique Actions: ", len(just_actions))
+    print("Total unique Nouns: ", len(just_nouns))
+
 
     print("Done!")
 
