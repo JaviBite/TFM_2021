@@ -237,6 +237,7 @@ def getMostFlowRoi(possible_rois, cap, init_frame, search_frame, padding=0, visu
             v = np.sqrt(fx * fx + fy * fy)
 
             averages.append(np.nanmean(v[np.nonzero(v)]))
+            np.nan_to_num(averages, nan=0.0, copy=False)
 
         #print(averages)
         try:
@@ -281,6 +282,7 @@ def getMostFlowRoi(possible_rois, cap, init_frame, search_frame, padding=0, visu
         cv2.rectangle(frame, pt1, pt2, (0,255,0), 4)
 
         cv2.imshow("LAS ELIPSES FINALES", frame)
+        cv2.waitKey(10)
     
     return x1, y1, x2, y2
 
@@ -289,11 +291,13 @@ def closest_rois(rois, time):
 
     ret_rois = []
     # Get the time of the closest (temporaly) roi
-    last_time = rois[0]['z'][0]
+    last_time = float(rois[0]['z'][0])
     ret_rois.append(rois[0]['xy'][1:])
 
+
     for idx in range(1,len(rois)):
-        roi_time = rois[idx]['z'][0]
+        roi_time = float(rois[idx]['z'][0])
+
 
         # If the time is greater than the last time, we have found the closest roi
         if roi_time > time:
@@ -309,6 +313,7 @@ def closest_rois(rois, time):
 
             last_time = rois[idx]['z'][0]
             ret_rois.append(rois[idx]['xy'][1:])
+
 
     return ret_rois
 
