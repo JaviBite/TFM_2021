@@ -33,6 +33,9 @@ class Window:
         if len(self.seq) > self.win_size:
             self.seq.pop(0)
 
+    def clear(self):
+        self.seq.clear()        
+
     def get(self):
         return self.seq
 
