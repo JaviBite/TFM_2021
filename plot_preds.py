@@ -1,11 +1,13 @@
 import numpy as np
 from matplotlib import pyplot as plt
+import sys
 
 
 def main():
 
-    Y_FILE = "full_demos_out/out_demo_y.txt"
-    YHAT_FILE = "full_demos_out/out_demo_yhat.txt"
+    FOLDER = "./out_all_videos_pred"
+    Y_FILE = f"{FOLDER}/out_{sys.argv[1]}_y.txt"
+    YHAT_FILE = f"{FOLDER}/out_{sys.argv[1]}_yhat.txt"
 
     # Load data
     y = np.loadtxt(Y_FILE)

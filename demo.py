@@ -45,10 +45,16 @@ def main():
     JSON_FILE =  "./BSH_firsthalf_0.2_pots_forml_nogit.json"
     CLASSES = ["remover ","poner (?!olla|sarten|cazo)","voltear ","^(?!remover|interaccion|poner|voltear) "]
     CLASS_NAMES = ["STIR", "ADD", "FLIP", "OTHERS"]
+    OUT_FOLDER = "./out_all_videos_pred"
+
+    # Create dir if not exists
+    if not os.path.exists(OUT_FOLDER):
+        os.makedirs(OUT_FOLDER)
 
     PREDICT_STEPS = 4
     WINDOW_OVERLAPPING = 0.7
     WRITE_VIDEO = True
+    AFTER_TIME = 3.0  #seconds
 
     VIS = True
     DEBUG = False
@@ -56,7 +62,7 @@ def main():
     VIS_HOG = False
 
     END_OFF = 1
-    INIT_OFF = 0.5
+    INIT_OFF = 1
 
     # DO NOT CHANGE
     FPS = 25
@@ -73,9 +79,11 @@ def main():
     json_data = json.load(open(JSON_FILE))
 
     # Iterate through videos
+    break_at_end = False
     for vid in range(1,100):
 
         if VID is None:
+            break_at_end = False
             VID = vid
 
         # Video path
@@ -119,7 +127,7 @@ def main():
         
         # Video Writer
         if WRITE_VIDEO:
-            out_path = f"out_{VID}.mp4"
+            out_path = f"{OUT_FOLDER}/out_{VID}.mp4"
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
             vid_out = cv2.VideoWriter(out_path, fourcc, FPS, (int(width), int(height)))
 
@@ -178,6 +186,7 @@ def main():
         flow_acc = np.zeros((DIM[0],DIM[1],2))
         last_gray_frames = [0,0]
         inside_action = False   
+        after_action = 0.0
 
         predictions = []
         pred_per_sec = []
@@ -298,12 +307,9 @@ def main():
                 actual_roi = None
                 flow_count = 0
                 flow_acc = np.zeros((DIM[0],DIM[1],2)) 
-                inside_action = False    
+                inside_action = False 
 
-                # Clean predictions
-                predictions.clear()
-                window.clear()
-                win_add_count = 0
+                after_action = AFTER_TIME   
 
                 if len(actions) > 0:
                     next_action = actions.pop(0) 
@@ -319,15 +325,25 @@ def main():
 
                 pred = [0.0, 0.0, 0.0, 0.0]
                 y = pred
-                if inside_action:
+                if inside_action or after_action > 0.0:
                     # Mean of last predictions
                     y = to_categorical(next_action['match'], num_classes=len(CLASS_NAMES))
                     if len(predictions) > 5:
                         pred = sum(np.array(predictions[-5:])/5)
-
+                    elif len(predictions) > 0:
+                        pred = sum(np.array(predictions[-len(predictions):])/len(predictions))
                 
                 pred_per_sec.append(pred)
                 pred_per_sec_y.append(y)
+
+                if not inside_action and len(window) > 0:
+                    # Clean predictions
+                    predictions.clear()
+                    window.clear()
+                    win_add_count = 0
+
+                if not inside_action and after_action > 0.0:
+                    after_action -= 1.0
 
             # Write video
             if WRITE_VIDEO:
@@ -350,7 +366,7 @@ def main():
 
                     text = pred_str + " : " + str(class_names)
                     color = (0, 255, 0) if inside_action else (255, 255, 255)
-                    cv2.putText(frame, text, (10, int(h+10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    cv2.putText(frame, text, (10, int(h+20)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                 # Draw ROI
                 #if inside_action:
@@ -365,12 +381,15 @@ def main():
             t.update(1)
 
         # Write predicitons log
-        np.savetxt(f"out_{VID}_yhat.txt", np.array(pred_per_sec), fmt='%.2f')
-        np.savetxt(f"out_{VID}_y.txt", np.array(pred_per_sec_y), fmt='%.2f')
+        np.savetxt(f"{OUT_FOLDER}/out_{VID}_yhat.txt", np.array(pred_per_sec), fmt='%.2f')
+        np.savetxt(f"{OUT_FOLDER}/out_{VID}_y.txt", np.array(pred_per_sec_y), fmt='%.2f')
 
-        vid_out.close()
         cap.release()
         cv2.destroyAllWindows()
+
+        if break_at_end:
+            break
+
 
     return 0
 
