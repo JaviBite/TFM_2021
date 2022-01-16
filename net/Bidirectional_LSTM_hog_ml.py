@@ -108,7 +108,7 @@ def main():
     for yi in y:
         count_classes += yi
         
-    print("Count classes:",count_classes)
+    print("Count classes:", count_classes)
 
     print("X Shape: ", X.shape)
     print("Y Shape: ", y.shape)
@@ -123,10 +123,10 @@ def main():
 
     INPUT_SHAPE = (n_timesteps, n_features)
     
-    SPLITS = 5
+    SPLITS = 1
     
     lr = [0.001] * SPLITS
-    lstm_units = [64]  * SPLITS
+    lstm_units = [128]  * SPLITS
     rec_drop = [0.2] * SPLITS
     lstm_act = ['tanh'] * SPLITS
     lstm_rec_act = ['hard_sigmoid'] * SPLITS
@@ -134,19 +134,19 @@ def main():
     hidden_act = ['sigmoid'] * SPLITS
     dropouts = [[0.5,0.3,0.2]] * SPLITS
     hidden_dense_untis = [64] * SPLITS
-    regularicer = [0,0.001,0.0001,0.0005] * SPLITS
+    regularicer = [0.0005] * SPLITS
     condition = [True] * SPLITS
-    lr_patience = [2] * SPLITS
+    lr_patience = [3] * SPLITS
 
     optimizers = ['adam'] * SPLITS
     losses = ['binary_crossentropy'] * SPLITS
-    epochs = [30] * SPLITS
+    epochs = [10] * SPLITS
     
     to_vis = ['regularicer','condition']
 
-    BATCH_SIZE = 32
+    BATCH_SIZE = 5
     i = 0
-    MAX_I = 0
+    MAX_I = 1
     
     best_acc = 0
 
