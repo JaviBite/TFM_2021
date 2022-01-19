@@ -350,7 +350,6 @@ def main():
         # Most frequent
         thresholded = np.array(np.array(predictions) > THRES).astype(int)
         
-        print(thresholded)
         pairs, counts = np.unique(thresholded, axis=0, return_counts=True)
         most_frequent = pairs[counts.argmax()]
 
@@ -381,11 +380,11 @@ def main():
         if four_con is None:
             four_con = np.zeros(4)
 
-        print("Most frequent: ", most_frequent)
-        print("Two consecuvites: ", two_con)
-        print("Tree consecuvites: ", three_con)
-        print("Four consecuvites: ", four_con)
-        print("Average: ", (avg > THRES))
+        # print("Most frequent: ", most_frequent)
+        # print("Two consecuvites: ", two_con)
+        # print("Tree consecuvites: ", three_con)
+        # print("Four consecuvites: ", four_con)
+        # print("Average: ", (avg > THRES))
 
 
         yhat = (avg > THRES).astype(int)
