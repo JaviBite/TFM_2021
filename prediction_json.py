@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 from tqdm import tqdm
 
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
 from keras.utils.all_utils import to_categorical
 from keras.models import load_model
@@ -69,6 +69,8 @@ def main():
     # Parsed values
     VID_FOLDER = args.videos_folder
     VIS = args.visualize or args.debug
+
+    THRES = 0.4
     
     MODEL_FILE = args.model_file
     DATA_FILE = args.data_file
@@ -129,7 +131,14 @@ def main():
 
     # Iterate thorugh samples
     t=tqdm(total=len(frag_indx))
-    list_yhat = []
+
+    list_yhat_avg = []
+    list_yhat_mean = []
+    list_yhat_freq = []
+    list_yhat_t2 = []
+    list_yhat_t3 = []
+    list_yhat_t4 = []
+
     list_y = []
     good_count = 0
     total_pred = [0] * N_CLASSES
@@ -299,7 +308,7 @@ def main():
 
                         class_names = []
                         for idx, value in enumerate(predictions[-1]):
-                            if value > 0.4:
+                            if value > THRES:
                                 class_names.append(CLASS_NAMES[idx])
 
                         text = "Pred: ("+ str(len(predictions)) +"): " + pred_str + " : " + str(class_names)
@@ -314,7 +323,7 @@ def main():
                         text = "Avg: ("+ str(len(predictions)) +"): " + avg_str
                         #cv2.putText(frame, text, (10, int(height-50)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-                        yhat = (avg > 0.4).astype(int)
+                        yhat = (avg > THRES).astype(int)
                         yhat_str = '[{:s}]'.format(', '.join([str(int(x)) for x in yhat]))
                         text = "Th: ("+ str(len(predictions)) +"): " + yhat_str
                         #cv2.putText(frame, text, (10, int(height-70)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
@@ -335,12 +344,59 @@ def main():
         cv2.destroyAllWindows()
         cap.release()
 
-
+        # Average
         avg = sum(np.array(predictions)/len(predictions))
-        yhat = (avg > 0.4).astype(int)
+
+        # Most frequent
+        thresholded = np.array(np.array(predictions) > THRES).astype(int)
+        
+        print(thresholded)
+        pairs, counts = np.unique(thresholded, axis=0, return_counts=True)
+        most_frequent = pairs[counts.argmax()]
+
+        # Two consecuvites
+        two_con = None
+        three_con = None
+        four_con = None
+        value = thresholded[0]
+        count_same = 0
+        for elem in thresholded[1:]:
+            if (elem == value).all():
+                count_same += 1
+            else:
+                count_same = 0
+                value = elem
+            
+            if count_same == 1 and two_con is None:
+                two_con = elem
+            if count_same == 2 and three_con is None:
+                three_con = elem
+            if count_same == 3 and four_con is None:
+                four_con = elem
+
+        if two_con is None:
+            two_con = np.zeros(4)
+        if three_con is None:
+            three_con = np.zeros(4)
+        if four_con is None:
+            four_con = np.zeros(4)
+
+        print("Most frequent: ", most_frequent)
+        print("Two consecuvites: ", two_con)
+        print("Tree consecuvites: ", three_con)
+        print("Four consecuvites: ", four_con)
+        print("Average: ", (avg > THRES))
+
+
+        yhat = (avg > THRES).astype(int)
         good = (yhat == label).all()
 
-        list_yhat.append(yhat)
+        list_yhat_avg.append((avg > THRES).astype(int))
+        list_yhat_freq.append(most_frequent)
+        list_yhat_t2.append(two_con)
+        list_yhat_t3.append(three_con)
+        list_yhat_t4.append(four_con)
+
         list_y.append(label)
 
         if good:
@@ -384,15 +440,24 @@ def main():
     
     t.close()
 
-    f1_s = f1_score(list_y, list_yhat, average='weighted')
-    precision = precision_score(list_y, list_yhat, average='weighted')
-    recall = recall_score(list_y, list_yhat, average='weighted')
 
-    # Priny statistics
-    print("Accuracy: ", good_count/len(frag_indx))
-    print("Precision: ", precision)
-    print("Recall: ", recall)
-    print("F1 Score: ", f1_s)
+    names = ["Average","Most Frequent","Two Consecutives","Three Consecutives","Four Consecutives"]
+    lists = [list_yhat_avg, list_yhat_freq, list_yhat_t2, list_yhat_t3, list_yhat_t4]
+    for idx, list_yhat in enumerate(lists):
+
+        print("==========================================================")
+        print("================   " + names[idx] +  "   =====================")
+        print("==========================================================")
+        acc = accuracy_score(list_y, list_yhat, normalize=True)
+        f1_s = f1_score(list_y, list_yhat, average='weighted')
+        precision = precision_score(list_y, list_yhat, average='weighted')
+        recall = recall_score(list_y, list_yhat, average='weighted')
+
+        # Priny statistics
+        print("Accuracy: ", acc)
+        print("Precision: ", precision)
+        print("Recall: ", recall)
+        print("F1 Score: ", f1_s)
 
 
     print("\nTotal Prob: ", total_prob/len(frag_indx))
